@@ -810,7 +810,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 
 		this.database.exec("BEGIN EXCLUSIVE TRANSACTION");
 
-		let rolled_back = false;
+		let rolled_back: boolean;
 
 		try {
 			rolled_back = this._downgrade_to(version);

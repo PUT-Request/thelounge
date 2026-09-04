@@ -1,7 +1,8 @@
 module.exports = {
 	extends: "stylelint-config-standard",
 	rules: {
-		indentation: "tab",
+		// indentation was removed from stylelint core (v16+); tabs remain
+		// the convention via .editorconfig.
 		"font-family-no-missing-generic-family-keyword": null,
 		"no-descending-specificity": null,
 		"at-rule-no-vendor-prefix": true,

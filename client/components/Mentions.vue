@@ -32,7 +32,7 @@
 					<div class="mentions-info">
 						<div>
 							<span class="from">
-								<Username :user="(message.from as any)" />
+								<Username :user="message.from as any" />
 								<template v-if="message.channel">
 									in {{ message.channel.channel.name }} on
 									{{ message.channel.network.name }}
@@ -57,7 +57,7 @@
 						</div>
 					</div>
 					<div class="content" dir="auto">
-						<ParsedMessage :message="(message as any)" />
+						<ParsedMessage :message="message as any" />
 					</div>
 				</div>
 			</template>

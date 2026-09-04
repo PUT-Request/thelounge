@@ -75,10 +75,7 @@
 
 .setting-toggle .toggle-track {
 	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
+	inset: 0;
 	background-color: #ccc;
 	background-color: color-mix(in srgb, var(--body-color) 20%, var(--window-bg-color));
 	border-radius: 11px;
@@ -286,7 +283,7 @@
 	margin-top: 0;
 }
 
-@media screen and (max-width: 480px) {
+@media screen and (width <= 480px) {
 	.setting-card {
 		padding: 8px 14px 12px;
 	}

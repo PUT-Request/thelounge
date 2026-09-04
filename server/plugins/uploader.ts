@@ -93,7 +93,7 @@ class Uploader {
 		// normalize back to a single value. A joined multi-segment `name`
 		// can never match the hex regex below, so this stays a 404.
 		const firstParam = (value: string | string[] | undefined): string =>
-			Array.isArray(value) ? value.join("/") : value ?? "";
+			Array.isArray(value) ? value.join("/") : (value ?? "");
 		const name = firstParam(req.params.name);
 
 		const nameRegex = /^[0-9a-f]{16}$/;
@@ -190,12 +190,10 @@ class Uploader {
 		}
 
 		// Only allow multipart, as busboy can throw an error on unsupported types
-		if (
-			!(
-				req.headers["content-type"] &&
-				req.headers["content-type"].startsWith("multipart/form-data")
-			)
-		) {
+		if (!(
+			req.headers["content-type"] &&
+			req.headers["content-type"].startsWith("multipart/form-data")
+		)) {
 			return abortWithError(Error("Unsupported Content Type"));
 		}
 

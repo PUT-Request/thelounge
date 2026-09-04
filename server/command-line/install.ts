@@ -35,7 +35,7 @@ program
 
 		log.info("Retrieving information about the package...");
 		// TODO: type
-		let readFile: any = null;
+		let readFile: any;
 		let isLocalFile = false;
 
 		if (packageName.startsWith("file:")) {

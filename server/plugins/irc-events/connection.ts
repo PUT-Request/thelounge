@@ -171,8 +171,8 @@ export default <IrcEventHandler>function (irc, network) {
 				error instanceof Error
 					? error.message
 					: typeof error === "string"
-					? error
-					: "unknown error";
+						? error
+						: "unknown error";
 
 			network.getLobby().pushMessage(
 				client,

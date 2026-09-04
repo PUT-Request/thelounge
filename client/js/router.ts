@@ -221,7 +221,7 @@ function switchToChannel(channel: ClientChan, message?: {id?: number; storageId?
 			? {
 					focused: message.id,
 					focusedStorageId: message.storageId,
-			  }
+				}
 			: {}
 	);
 }

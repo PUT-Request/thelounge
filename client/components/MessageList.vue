@@ -342,7 +342,7 @@ export default defineComponent({
 
 		const highestIdAt = (entry: CondensedEntry): number =>
 			entry.type === "condensed"
-				? entry.id ?? entry.messages[entry.messages.length - 1].id
+				? (entry.id ?? entry.messages[entry.messages.length - 1].id)
 				: entry.id;
 
 		// Shows the unread marker exactly once, on the first entry (in array

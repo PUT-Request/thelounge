@@ -78,10 +78,9 @@ function passwordCompare(password: string, expected: string) {
 }
 
 function parseHostmask(hostmask: string): Hostmask {
-	let nick = "";
 	let ident = "*";
 	let hostname = "*";
-	let parts: string[] = [];
+	let parts: string[];
 
 	// Parse hostname first, then parse the rest
 	parts = hostmask.split("@");
@@ -102,7 +101,7 @@ function parseHostmask(hostmask: string): Hostmask {
 
 	ident = ident.toLowerCase();
 
-	nick = hostmask.toLowerCase() || "*";
+	const nick = hostmask.toLowerCase() || "*";
 
 	const result = {
 		nick: nick,

@@ -14,7 +14,7 @@ async function checkStaleness() {
 		return;
 	}
 
-	let response: Response | null = null;
+	let response: Response | null;
 
 	try {
 		response = await fetch("version-hash", {cache: "no-store"});

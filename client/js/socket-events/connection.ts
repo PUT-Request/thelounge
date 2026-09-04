@@ -2,7 +2,7 @@ import {store} from "../store";
 import socket, {tryAgainMessage} from "../socket";
 
 const disconnectionTypes = ["disconnect", "connect_error", "error"] as const;
-type DisconnectionType = typeof disconnectionTypes[number];
+type DisconnectionType = (typeof disconnectionTypes)[number];
 
 for (const type of disconnectionTypes) {
 	socket.on(type, (data) => {

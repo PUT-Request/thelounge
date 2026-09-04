@@ -180,5 +180,5 @@ function normalizeConfig(obj: typeof defaultConfig) {
 
 // flatten to type of default
 export type SettingsState = {
-	[key in keyof typeof defaultConfig]: typeof defaultConfig[key]["default"];
+	[key in keyof typeof defaultConfig]: (typeof defaultConfig)[key]["default"];
 };

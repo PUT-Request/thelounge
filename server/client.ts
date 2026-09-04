@@ -430,7 +430,7 @@ class Client {
 		const userAgent = new UAParser(request.headers["user-agent"] || "");
 		const browser = userAgent.getBrowser();
 		const os = userAgent.getOS();
-		let friendlyAgent = "";
+		let friendlyAgent: string;
 
 		if (browser.name) {
 			friendlyAgent = `${browser.name} ${browser.major || ""}`;
@@ -653,7 +653,7 @@ class Client {
 
 		const chan = target.chan;
 		let messages: Msg[] = [];
-		let index = 0;
+		let index: number;
 
 		// If client requests -1, send last 100 messages
 		if (data.lastId < 0) {
@@ -825,7 +825,7 @@ class Client {
 					chan: target.chan.id,
 					messages: stored.messages,
 					hasMoreAfter: stored.hasMoreAfter,
-			  }
+				}
 			: null;
 	}
 
@@ -881,7 +881,7 @@ class Client {
 		// process this event normally even if there is no attached client anymore.
 		const attachedClient =
 			this.attachedClients[socketId] ||
-			({} as Record<string, typeof this.attachedClients[0]>);
+			({} as Record<string, (typeof this.attachedClients)[0]>);
 
 		// Opening a window like settings
 		if (target === null) {
