@@ -81,6 +81,30 @@ Use `node index <command>` to run commands (e.g. `node index --help`).
 > progress. It is generally kept green (`yarn test` passes), but run it at
 > your own risk, and avoid running it as root.
 
+## Docker
+
+No separate packaging repo is needed — the image builds straight from this
+source tree (multi-stage, non-root, ~120 MB):
+
+```sh
+docker build -t thelounge .
+docker run -d -p 9000:9000 -v thelounge-data:/home/lounge/data thelounge
+```
+
+Or with compose (see [`docker-compose.yml`](./docker-compose.yml)):
+
+```sh
+docker compose up -d --build
+```
+
+Published images are built from `master` by
+[`.github/workflows/docker.yml`](.github/workflows/docker.yml) and pushed to
+`ghcr.io/PUT-Request/thelounge` (`:latest` plus branch/tag images).
+Pull requests only build the image without pushing.
+
+Data (config, users, logs, message databases) lives in `/home/lounge/data`
+— back up that volume.
+
 ## Project layout
 
 | Path                             | Contents                                             |

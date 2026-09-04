@@ -1,0 +1,14 @@
+node_modules
+dist
+public
+coverage
+.git
+.github
+.vscode
+test
+*.log
+*.tgz
+.thelounge
+.env
+.env.*
+docker-compose*.yml

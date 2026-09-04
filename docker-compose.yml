@@ -1,0 +1,19 @@
+services:
+  thelounge:
+    # Build locally: docker compose build
+    # Or use a published image (see .github/workflows/docker.yml):
+    # image: ghcr.io/put-request/thelounge:latest
+    build: .
+    container_name: thelounge
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - thelounge-data:/home/lounge/data
+    environment:
+      # Uncomment to run behind a reverse proxy that sets X-Forwarded-*:
+      # - NODE_ENV=production
+      - TZ=UTC
+
+volumes:
+  thelounge-data:
