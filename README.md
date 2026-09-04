@@ -103,7 +103,8 @@ Published images are built from `master` by
 Pull requests only build the image without pushing.
 
 Data (config, users, logs, message databases) lives in `/home/lounge/data`
-— back up that volume.
+— back up that volume. Full guide (reverse proxy, updates, backups,
+migration, troubleshooting): [`docs/docker.md`](./docs/docker.md).
 
 ## Project layout
 
