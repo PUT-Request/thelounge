@@ -209,7 +209,7 @@ export default defineComponent({
 		};
 
 		const openUserContextMenu = (data: {
-			user: Pick<ClientUser, "nick" | "modes">;
+			user: Pick<ClientUser, "nick" | "modes"> & {senderType?: "bot"};
 			event: MouseEvent;
 		}) => {
 			const {network, channel} = store.state.activeChannel;
@@ -218,9 +218,13 @@ export default defineComponent({
 				store,
 				channel,
 				network,
-				channel.users.find((u) => u.nick === data.user.nick) || {
+				(channel.users.find((u) => u.nick === data.user.nick) as Pick<
+					ClientUser,
+					"nick" | "modes"
+				> & {senderType?: "bot"}) || {
 					nick: data.user.nick,
 					modes: [],
+					senderType: (data.user as any).senderType,
 				}
 			);
 			open(data.event, newItems);

@@ -5,9 +5,11 @@ import fs from "fs";
 import crypto from "crypto";
 import log from "../log";
 import contentDisposition from "content-disposition";
+import mimeTypes from "mime-types";
 import type {Socket} from "socket.io";
 import {Request, Response} from "express";
 import NodeBuffer, {Buffer} from "buffer";
+import {UploadProviders, UploadProvider} from "../../shared/upload-providers";
 
 // Map of mime types to their more common aliases
 const mimeAliases: {[key: string]: string} = {
@@ -42,6 +44,9 @@ const inlineContentDispositionTypes = {
 };
 
 const uploadTokens = new Map();
+
+const EXPIRY_SUFFIX = ".expires";
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
 class Uploader {
 	constructor(socket: Socket) {
@@ -86,6 +91,8 @@ class Uploader {
 		express.get("/uploads/:name", Uploader.routeGetFile);
 		express.get("/uploads/:name/{*slug}", Uploader.routeGetFile);
 		express.post("/uploads/new/:token", Uploader.routeUploadFile);
+		express.post("/uploads/:service/:token", Uploader.routeUploadFile);
+		express.post("/uploads/:service/:token/:ttl", Uploader.routeUploadFile);
 	}
 
 	static async routeGetFile(this: void, req: Request, res: Response) {
@@ -146,9 +153,16 @@ class Uploader {
 		let busboyInstance: busboy | null | undefined;
 		let uploadUrl: string | URL;
 		let randomName: string;
+		let originalFilename = "";
 		let destDir: fs.PathLike;
 		let destPath: fs.PathLike | null;
 		let streamWriter: fs.WriteStream | null;
+
+		// `/uploads/new/:token` (legacy local) vs `/uploads/:service/:token/:ttl?`
+		const service: string = (req.params as any).service ?? "new";
+		const token: string = (req.params as any).token;
+		const ttl: string = (req.params as any).ttl ?? "";
+		const uploadProvider = UploadProviders.find((b) => b.id === service);
 
 		const doneCallback = () => {
 			// detach the stream and drain any remaining data
@@ -180,8 +194,18 @@ class Uploader {
 		};
 
 		// if the authentication token is incorrect, bail out
-		if (uploadTokens.delete(req.params.token) !== true) {
-			return abortWithError(Error("Invalid upload token"));
+		if (!uploadProvider) {
+			return abortWithError(Error("Invalid upload provider"));
+		}
+
+		if (uploadProvider.requiresToken && token === `_${uploadProvider.id}_`) {
+			return abortWithError(Error("Missing API Key"));
+		}
+
+		if (uploadProvider.id === "new") {
+			if (uploadTokens.delete(token) !== true) {
+				return abortWithError(Error("Invalid upload token"));
+			}
 		}
 
 		// if the request does not contain any body data, bail out
@@ -257,6 +281,7 @@ class Uploader {
 				filename: string | number | boolean
 			) => {
 				uploadUrl = `${randomName}/${encodeURIComponent(filename)}`;
+				originalFilename = String(filename);
 
 				if (Config.values.fileUpload.baseUrl) {
 					uploadUrl = new URL(uploadUrl, Config.values.fileUpload.baseUrl).toString();
@@ -281,11 +306,79 @@ class Uploader {
 		);
 
 		busboyInstance.on("finish", () => {
+			if (service !== "new" && uploadProvider) {
+				// service upload: relay the temp file to the remote provider
+				const provider = uploadProvider;
+
+				const relay = () => {
+					let file: File;
+
+					try {
+						const data = fs.readFileSync(destPath as string);
+						const type =
+							(mimeTypes.lookup(originalFilename) as string) ||
+							"application/octet-stream";
+						file = new File([new Blob([new Uint8Array(data)])], originalFilename, {
+							type,
+						});
+					} catch (err: any) {
+						return abortWithError(err);
+					}
+
+					provider
+						.upload(file, ttl, token)
+						.then((url) => {
+							try {
+								fs.unlink(destPath as string, () => undefined);
+							} catch {
+								// ignore
+							}
+
+							let finalUrl: string | URL = url;
+
+							// Allow host masking for vanity URL for externally hosted files
+							if (
+								Config.values.maskFileHost &&
+								Config.values.fileUpload.baseUrl !== null &&
+								Config.values.fileUpload.baseUrl !== undefined
+							) {
+								try {
+									const oldHost = new URL(url).host;
+									const newHost = new URL(Config.values.fileUpload.baseUrl).host;
+									finalUrl = url.replace(oldHost, newHost);
+								} catch {
+									finalUrl = url;
+								}
+							}
+
+							if (!finalUrl) {
+								return res.status(400).json({error: "Missing file"});
+							}
+
+							return res.status(200).json({url: finalUrl});
+						})
+						.catch((err) => {
+							abortWithError(err);
+						});
+				};
+
+				if (!streamWriter || (streamWriter as any).closed === true) {
+					relay();
+				} else {
+					streamWriter?.once("finish", relay);
+				}
+
+				doneCallback();
+				return;
+			}
+
 			doneCallback();
 
 			if (!uploadUrl) {
 				return res.status(400).json({error: "Missing file"});
 			}
+
+			Uploader.writeExpiry(destPath as string, uploadProvider, ttl);
 
 			// upload was done, send the generated file url to the client
 			res.status(200).json({
@@ -295,6 +388,103 @@ class Uploader {
 
 		// pipe request body to busboy for processing
 		return req.pipe(busboyInstance);
+	}
+
+	// Records an expiry timestamp for a locally stored upload, if a valid TTL was requested.
+	static writeExpiry(this: void, filePath: string, uploadProvider: UploadProvider, ttl: string) {
+		const ttlEntry = uploadProvider.validTtl?.find((t) => t.id === ttl);
+		let ttlSeconds: number;
+
+		if (ttlEntry) {
+			if (ttlEntry.value === "-" || ttlEntry.id === "custom") {
+				return;
+			}
+
+			ttlSeconds = parseInt(ttlEntry.value, 10);
+		} else {
+			ttlSeconds = parseInt(ttl, 10);
+		}
+
+		if (Number.isNaN(ttlSeconds) || ttlSeconds <= 0) {
+			return;
+		}
+
+		const expiresAt = Date.now() + ttlSeconds * 1000;
+
+		try {
+			fs.writeFileSync(`${filePath}${EXPIRY_SUFFIX}`, String(expiresAt));
+		} catch (err: unknown) {
+			log.warn(
+				`Failed to write expiry metadata for ${filePath}: ${
+					err instanceof Error ? err.message : String(err)
+				}`
+			);
+		}
+	}
+
+	// Scans the upload folder for expired local uploads and removes them
+	static pruneExpiredUploads(this: void) {
+		const uploadPath = Config.getFileUploadPath();
+		let subDirs: string[];
+
+		try {
+			subDirs = fs.readdirSync(uploadPath);
+		} catch {
+			return;
+		}
+
+		const now = Date.now();
+
+		for (const subDir of subDirs) {
+			const dirPath = path.join(uploadPath, subDir);
+			let entries: string[];
+
+			try {
+				entries = fs.readdirSync(dirPath);
+			} catch {
+				continue;
+			}
+
+			for (const entry of entries) {
+				if (!entry.endsWith(EXPIRY_SUFFIX)) {
+					continue;
+				}
+
+				const expiryPath = path.join(dirPath, entry);
+				const filePath = expiryPath.slice(0, -EXPIRY_SUFFIX.length);
+
+				let expiresAt: number;
+
+				try {
+					expiresAt = parseInt(fs.readFileSync(expiryPath, "utf8"), 10);
+				} catch {
+					continue;
+				}
+
+				if (Number.isNaN(expiresAt) || expiresAt > now) {
+					continue;
+				}
+
+				fs.rmSync(filePath, {force: true});
+				fs.rmSync(expiryPath, {force: true});
+
+				log.info(`Removed expired upload: ${filePath}`);
+			}
+
+			try {
+				if (fs.readdirSync(dirPath).length === 0) {
+					fs.rmdirSync(dirPath);
+				}
+			} catch {
+				// not empty, or already removed - ignore
+			}
+		}
+	}
+
+	// Starts the periodic sweep that removes local uploads past their TTL
+	static startExpiryCleanup(this: void) {
+		Uploader.pruneExpiredUploads();
+		setInterval(Uploader.pruneExpiredUploads, CLEANUP_INTERVAL).unref();
 	}
 
 	static getMaxFileSize() {

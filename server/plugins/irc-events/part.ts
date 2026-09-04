@@ -26,12 +26,31 @@ export default <IrcEventHandler>function (irc, network) {
 			from: user,
 			self: data.nick === irc.user.nick,
 		});
-		chan.pushMessage(client, msg);
 
+		// Self parts should not be buffered and need special handling
 		if (data.nick === irc.user.nick) {
+			chan.pushMessage(client, msg);
 			client.part(network, chan);
-		} else {
+			return;
+		}
+
+		// User list update callback - executed regardless of buffering
+		const updateUserList = () => {
 			chan.removeUser(user);
+		};
+
+		// Try to process through mass event aggregator
+		const wasBuffered = client.massEventAggregator.processMessage(
+			network,
+			chan,
+			msg,
+			updateUserList
+		);
+
+		if (!wasBuffered) {
+			// Not in mass event mode - process normally
+			chan.pushMessage(client, msg);
+			updateUserList();
 		}
 	});
 };

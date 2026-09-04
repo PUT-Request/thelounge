@@ -226,9 +226,28 @@ const properties = [
 	"monospace",
 ];
 
-function prepare(text: string) {
+function convertBBCode(str: string) {
+	// convert formatting to irc
+	str = str.replace(/(?:\[b(?:=.*)?\])|(?:\[\/b\])/gi, "\x02");
+	str = str.replace(/(?:\[i(?:=.*)?\])|(?:\[\/i\])/gi, "\x1D");
+	str = str.replace(/(?:\[u(?:=.*)?\])|(?:\[\/u\])/gi, "\x1F");
+	str = str.replace(/(?:\[s(?:=.*)?\])|(?:\[\/s\])/gi, "\x1e");
+	str = str.replace(/(?:\[code(?:=.*)?\])|(?:\[\/code\])/gi, "\x11");
+	str = str.replace(/(?:\[color=#([A-F0-9]{3,6})\])/gi, "\x04$1");
+	str = str.replace(/(?:\[color(?:=.*)?\])|(?:\[\/color\])/gi, "\x0399,99");
+
+	// remove the rest of the bbcodes
+	str = str.replace(
+		/\[\/?(?:left|center|right|quote|list|icon|url|img|video|size|spoiler|effect|note|alert|table|tr|td|font).*?\]/gi,
+		""
+	);
+
+	return str;
+}
+
+function prepare(text: string, isBridged?: boolean) {
 	return (
-		parseStyle(text)
+		parseStyle(isBridged ? convertBBCode(text) : text)
 			// This optimizes fragments by combining them together when all their values
 			// for the properties defined above are equal.
 			.reduce((prev: ParsedStyle[], curr) => {

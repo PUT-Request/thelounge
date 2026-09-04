@@ -81,6 +81,7 @@ const builtInInputs = [
 	"topic",
 	"whois",
 	"mute",
+	"rainbow",
 ];
 
 for (const input of builtInInputs) {

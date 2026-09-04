@@ -10,6 +10,7 @@ import log from "./log";
 import Helper from "./helper";
 import Utils from "./command-line/utils";
 import Network from "./models/network";
+import {DefaultTorrentSiteInfo, TorrentSite, TorrentSiteInfo} from "../shared/types/chan";
 
 // TODO: Type this
 export type WebIRC = {
@@ -83,6 +84,19 @@ type StoragePolicy = {
 	deletionPolicy: "statusOnly" | "everything";
 };
 
+type MassEventDetection = {
+	enable: boolean;
+	threshold: number;
+	windowMs: number;
+	cooldownMs: number;
+	maxDurationMs: number;
+	refreshNamesAfter: boolean;
+};
+
+type TorrentSites = TorrentSite[];
+
+type TorrentSitesInfo = TorrentSiteInfo[];
+
 export type ConfigType = {
 	public: boolean;
 	host: string | undefined;
@@ -99,14 +113,20 @@ export type ConfigType = {
 	prefetchMaxSearchSize: number;
 	prefetchTimeout: number;
 	fileUpload: FileUpload;
+	allowFileUploadBackendSelection: boolean;
+	maskFileHost: boolean;
 	transports: string[];
 	leaveMessage: string;
 	defaults: Defaults;
 	lockNetwork: boolean;
 	messageStorage: string[];
 	storagePolicy: StoragePolicy;
+	massEventDetection: MassEventDetection;
 	useHexIp: boolean;
 	webirc?: WebIRC;
+	defaultTorrentSiteInfo: DefaultTorrentSiteInfo;
+	torrentSites?: TorrentSites;
+	torrentSitesInfo?: TorrentSitesInfo;
 	identd: Identd;
 	oidentd?: string;
 	ldap: Ldap;
@@ -168,6 +188,45 @@ class Config {
 		return this.values.defaults.nick.replace(/%/g, () =>
 			Math.floor(Math.random() * 10).toString()
 		);
+	}
+
+	private normalizeTorrentSite(
+		site: TorrentSite,
+		defaultSiteInfo: DefaultTorrentSiteInfo
+	): TorrentSiteInfo {
+		const normalized = {
+			...defaultSiteInfo,
+			...site,
+		};
+
+		normalized.profileUrl = `https://${normalized.domain}${normalized.profileUrl}`;
+
+		return normalized as TorrentSiteInfo;
+	}
+
+	private normalizeTorrentSites(
+		sites: TorrentSite[] | undefined,
+		defaultSiteInfo: DefaultTorrentSiteInfo
+	): TorrentSiteInfo[] | undefined {
+		if (!sites) {
+			return undefined;
+		}
+
+		return sites.map((site) => this.normalizeTorrentSite(site, defaultSiteInfo));
+	}
+
+	getTorrentSiteInfo(host: string, channelName: string) {
+		if (!this.values.torrentSitesInfo) {
+			return undefined;
+		}
+
+		for (const site of this.values.torrentSitesInfo) {
+			if (site.host === host && (!site.channels || site.channels.includes(channelName))) {
+				return site;
+			}
+		}
+
+		return undefined;
 	}
 
 	merge(newConfig: ConfigType) {
@@ -239,6 +298,11 @@ class Config {
 		if (this.values.defaults.host) {
 			this.values.defaults.host = this.values.defaults.host.toLowerCase();
 		}
+
+		this.values.torrentSitesInfo = this.normalizeTorrentSites(
+			this.values.torrentSites,
+			this.values.defaultTorrentSiteInfo
+		);
 
 		if (this.values.fileUpload.baseUrl) {
 			try {

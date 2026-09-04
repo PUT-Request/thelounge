@@ -5,6 +5,7 @@ import {switchToChannel} from "../router";
 import {TypedStore} from "../store";
 import useCloseChannel from "../hooks/use-close-channel";
 import {ChanType} from "../../../shared/types/chan";
+import {openInNewTab} from "./openInNewTab";
 
 type BaseContextMenuItem = {
 	label: string;
@@ -145,6 +146,19 @@ export function generateChannelContextMenu(
 
 	// Add menu items for queries
 	if (channel.type === ChanType.QUERY) {
+		if (channel.torrentSite && !channel.torrentSite.disabled) {
+			items.push({
+				label: `Tracker Profile`,
+				type: "item",
+				class: "action-open",
+				action() {
+					openInNewTab(channel.torrentSite?.profileUrl + channel.name);
+				},
+			});
+
+			items.push({type: "divider"});
+		}
+
 		items.push(
 			{
 				label: "User information",
@@ -166,6 +180,17 @@ export function generateChannelContextMenu(
 					socket.emit("input", {
 						target: channel.id,
 						text: "/ignore " + channel.name,
+					});
+				},
+			},
+			{
+				label: channel.pinned ? "Unpin conversation" : "Pin conversation",
+				type: "item",
+				class: "pin",
+				action() {
+					socket.emit("pin:change", {
+						target: channel.id,
+						setPinnedTo: !channel.pinned,
 					});
 				},
 			}
@@ -287,7 +312,7 @@ export function generateUserContextMenu(
 	store: TypedStore,
 	channel: ClientChan,
 	network: ClientNetwork,
-	user: Pick<ClientUser, "nick" | "modes">
+	user: Pick<ClientUser, "nick" | "modes"> & {senderType?: "bot"}
 ): ContextMenuItem[] {
 	const currentChannelUser: ClientUser | Record<string, never> = channel
 		? channel.users.find((u) => u.nick === network.nick) || {}
@@ -351,6 +376,17 @@ export function generateUserContextMenu(
 			},
 		},
 	];
+
+	if (channel.torrentSite && !channel.torrentSite.disabled && user.senderType !== "bot") {
+		items.splice(1, 0, {
+			label: `Tracker Profile`,
+			type: "item",
+			class: "action-open",
+			action() {
+				openInNewTab(channel.torrentSite?.profileUrl + user.nick);
+			},
+		});
+	}
 
 	// Bail because we're in a query or we don't have a special mode.
 	if (!currentChannelUser.modes || currentChannelUser.modes.length < 1) {

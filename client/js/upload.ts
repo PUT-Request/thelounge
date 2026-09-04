@@ -2,6 +2,7 @@ import {update as updateCursor} from "undate";
 
 import socket from "./socket";
 import {store} from "./store";
+import {UploadProviders} from "../../shared/upload-providers";
 
 class Uploader {
 	xhr: XMLHttpRequest | null = null;
@@ -226,6 +227,30 @@ class Uploader {
 	}
 
 	performUpload(token: string, file: File) {
+		const uploadEndpoint = store.state.serverConfiguration?.allowFileUploadBackendSelection
+			? store.state.settings.uploadTo
+			: "new";
+		const uploadProvider = UploadProviders.find((b) => b.id === uploadEndpoint)!;
+
+		// if not using local uploads set the token to user given api token
+		if (uploadProvider.id !== "new") {
+			token = token ? token : `_${uploadEndpoint}_`;
+
+			if (uploadProvider.requiresURL) {
+				// if needing to pass url for upload prepend it to the token
+				token = `${btoa(store.state.settings.uploadURL)}_|_${store.state.settings.uploadToken}`;
+			} else {
+				token = store.state.settings.uploadToken;
+			}
+		}
+
+		// The "custom" TTL option has no fixed duration of its own; substitute
+		// the user-entered seconds value the server should actually use.
+		const ttl =
+			store.state.settings.uploadTTL === "custom"
+				? (store.state.settings.uploadTTLCustom ?? "")
+				: (store.state.settings.uploadTTL ?? "");
+
 		this.xhr = new XMLHttpRequest();
 
 		this.xhr.upload.addEventListener(
@@ -266,7 +291,7 @@ class Uploader {
 
 		const formData = new FormData();
 		formData.append("file", file);
-		this.xhr.open("POST", `uploads/new/${token}`);
+		this.xhr.open("POST", `uploads/${uploadEndpoint}/${token}${ttl ? `/${ttl}` : ""}`);
 		this.xhr.send(formData);
 	}
 

@@ -195,7 +195,8 @@ function parse(text: string, message?: ClientMessage, network?: ClientNetwork) {
 
 function parseLine(text: string, message?: ClientMessage, network?: ClientNetwork) {
 	// Extract the styling information and get the plain text version from it
-	const styleFragments = parseStyle(text);
+	const isBridged = (message?.from?.shoutbox && message?.bbcodeBeautified !== true) ?? false;
+	const styleFragments = parseStyle(text, isBridged);
 	const cleanText = styleFragments.map((fragment) => fragment.text).join("");
 
 	// On the plain text, find channels and URLs, returned as "parts". Parts are

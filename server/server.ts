@@ -101,6 +101,7 @@ export default async function (
 
 	if (Config.values.fileUpload.enable) {
 		Uploader.router(app);
+		Uploader.startExpiryCleanup();
 	}
 
 	// This route serves *installed themes only*. Local themes are served directly
@@ -874,6 +875,32 @@ function initializeClient(
 
 			client.save();
 		});
+
+		socket.on("pin:change", ({target, setPinnedTo}) => {
+			const networkAndChan = client.find(target);
+
+			if (!networkAndChan) {
+				return;
+			}
+
+			const {chan} = networkAndChan;
+
+			// Only allow pinning queries
+			if (chan.type !== ChanType.QUERY) {
+				return;
+			}
+
+			chan.pinned = setPinnedTo;
+
+			for (const attachedClient of Object.keys(client.attachedClients)) {
+				manager!.sockets.in(attachedClient).emit("pin:changed", {
+					target,
+					status: setPinnedTo,
+				});
+			}
+
+			client.save();
+		});
 	}
 
 	socket.on("sign-out", (tokenToSignOut) => {
@@ -962,6 +989,8 @@ function getClientConfiguration(): SharedConfiguration | LockedSharedConfigurati
 		useHexIp: Config.values.useHexIp,
 		prefetch: Config.values.prefetch,
 		fileUploadMaxFileSize: Uploader ? Uploader.getMaxFileSize() : undefined, // TODO can't be undefined?
+		allowFileUploadBackendSelection: Config.values.allowFileUploadBackendSelection,
+		maskFileHost: Config.values.maskFileHost,
 	};
 
 	const defaultsOverride = {

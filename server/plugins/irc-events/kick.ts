@@ -24,9 +24,10 @@ export default <IrcEventHandler>function (irc, network) {
 			highlight: data.kicked === irc.user.nick,
 			self: data.nick === irc.user.nick,
 		});
-		chan.pushMessage(client, msg);
 
+		// Self kicks should not be buffered and need special handling
 		if (data.kicked === irc.user.nick) {
+			chan.pushMessage(client, msg);
 			chan.users = new Map();
 			chan.state = ChanState.PARTED;
 
@@ -34,8 +35,26 @@ export default <IrcEventHandler>function (irc, network) {
 				chan: chan.id,
 				state: chan.state,
 			});
-		} else {
+			return;
+		}
+
+		// User list update callback - executed regardless of buffering
+		const updateUserList = () => {
 			chan.removeUser(user);
+		};
+
+		// Try to process through mass event aggregator
+		const wasBuffered = client.massEventAggregator.processMessage(
+			network,
+			chan,
+			msg,
+			updateUserList
+		);
+
+		if (!wasBuffered) {
+			// Not in mass event mode - process normally
+			chan.pushMessage(client, msg);
+			updateUserList();
 		}
 	});
 };

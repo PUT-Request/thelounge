@@ -15,7 +15,9 @@ type ClientUser = SharedUser;
 
 // we will eventually need to put client specific fields here
 // which are not shared with the server
-export type ClientMessage = SharedMsg;
+export type ClientMessage = SharedMsg & {
+	bbcodeBeautified?: boolean;
+};
 
 type ClientChan = Omit<SharedChan, "messages"> & {
 	moreHistoryAvailable: boolean;

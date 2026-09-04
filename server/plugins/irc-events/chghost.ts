@@ -38,7 +38,22 @@ export default <IrcEventHandler>function (irc, network) {
 			}
 
 			touchedSharedChannel = true;
-			chan.pushMessage(client, buildMsg(user));
+
+			const msg = buildMsg(user);
+
+			// Try to process through mass event aggregator
+			// No user list update needed for chghost
+			const wasBuffered = client.massEventAggregator.processMessage(
+				network,
+				chan,
+				msg,
+				() => {} // No user list changes for chghost
+			);
+
+			if (!wasBuffered) {
+				// Not in mass event mode - process normally
+				chan.pushMessage(client, msg);
+			}
 		});
 
 		if (touchedSharedChannel) {

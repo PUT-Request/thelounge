@@ -122,7 +122,7 @@
 					>
 						<template v-slot:item="{element: channel, index}">
 							<Channel
-								v-if="index > 0"
+								v-if="index > 0 && channel.type !== 'query'"
 								:key="channel.id"
 								:data-item="channel.id"
 								:channel="channel"
@@ -134,6 +134,11 @@
 							/>
 						</template>
 					</Draggable>
+
+					<DirectMessageSection
+						:network="network"
+						:queries="network.channels.filter((c) => c.type === 'query')"
+					/>
 				</div>
 			</template>
 		</Draggable>
@@ -210,6 +215,7 @@ import {filter as fuzzyFilter} from "fuzzy";
 import NetworkLobby from "./NetworkLobby.vue";
 import Channel from "./Channel.vue";
 import JoinChannel from "./JoinChannel.vue";
+import DirectMessageSection from "./DirectMessageSection.vue";
 
 import socket from "../js/socket";
 import collapseNetworkHelper from "../js/helpers/collapseNetwork";
@@ -217,6 +223,7 @@ import isIgnoredKeybind from "../js/helpers/isIgnoredKeybind";
 import distance from "../js/helpers/distance";
 import eventbus from "../js/eventbus";
 import {ClientChan, NetChan} from "../js/types";
+import {ChanType} from "../../shared/types/chan";
 import {useStore} from "../js/store";
 import {switchToChannel} from "../js/router";
 import Sortable from "sortablejs";
@@ -228,6 +235,7 @@ export default defineComponent({
 		NetworkLobby,
 		Channel,
 		Draggable,
+		DirectMessageSection,
 	},
 	setup() {
 		const store = useStore();
@@ -313,15 +321,11 @@ export default defineComponent({
 		};
 
 		const onChannelSort = (e: Sortable.SortableEvent) => {
-			let {oldIndex, newIndex} = e;
+			const {oldIndex, newIndex} = e;
 
 			if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) {
 				return;
 			}
-
-			// Indexes are offset by one due to the lobby
-			oldIndex += 1;
-			newIndex += 1;
 
 			const unparsedId = e.item.getAttribute("data-item");
 
@@ -336,11 +340,34 @@ export default defineComponent({
 				return;
 			}
 
-			moveItemInArray(netChan.network.channels, oldIndex, newIndex);
+			const channels = netChan.network.channels;
+
+			// Sortable reports indexes among rendered rows only: the lobby and
+			// query channels render outside this list (DM section), so map the
+			// drop position back by id instead of assuming a fixed offset.
+			const visible = channels.filter((c, i) => i > 0 && c.type !== ChanType.QUERY);
+			const moved = visible[oldIndex];
+
+			// Sanity check: DOM and array state drifted, abort rather than scramble
+			if (!moved || moved.id !== id) {
+				return;
+			}
+
+			visible.splice(oldIndex, 1);
+			visible.splice(newIndex, 0, moved);
+
+			// Write back, keeping the lobby at index 0 and queries in place
+			let vi = 0;
+
+			for (let i = 1; i < channels.length; i++) {
+				if (channels[i].type !== ChanType.QUERY) {
+					channels[i] = visible[vi++];
+				}
+			}
 
 			socket.emit("sort:channels", {
 				network: netChan.network.uuid,
-				order: netChan.network.channels.map((c) => c.id),
+				order: channels.map((c) => c.id),
 			});
 		};
 

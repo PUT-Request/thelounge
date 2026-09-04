@@ -124,6 +124,51 @@
 			/>
 		</SettingCard>
 
+		<SettingCard title="Bridged messages">
+			<SettingToggle
+				name="beautifyBridgedMessages"
+				label="Beautify bridged shoutbox messages"
+				description="Parse bot-bridged tracker messages into real nicknames"
+				:checked="store.state.settings.beautifyBridgedMessages"
+			/>
+			<SettingToggle
+				name="beautifyBbcodeMessages"
+				label="Beautify BBCode messages"
+				description="Render BBCode tags (quote, spoiler, note, alert) as rich content"
+				:checked="store.state.settings.beautifyBbcodeMessages"
+			/>
+			<SettingToggle
+				name="filterdmsEnabled"
+				label="Enable DM filtering"
+				description="Show a filter input in the direct messages section"
+				:checked="store.state.settings.filterdmsEnabled"
+			/>
+			<SettingToggle
+				name="showAllDMs"
+				label="Show all DMs"
+				description="List all direct message windows instead of the 5 most recent"
+				:checked="store.state.settings.showAllDMs"
+			/>
+			<SettingToggle
+				name="enhancedUserListEnabled"
+				label="Enhanced user list"
+				description="Use grouped user list when the server provides user groups"
+				:checked="store.state.settings.enhancedUserListEnabled"
+			/>
+			<SettingToggle
+				name="enhancedContextMenuEnabled"
+				label="Enhanced context menu"
+				description="Show extra actions (tracker profile, pin, user info) in context menus"
+				:checked="store.state.settings.enhancedContextMenuEnabled"
+			/>
+			<SettingToggle
+				name="enableRainbowHotkey"
+				label="Rainbow hotkey"
+				description="Enable Ctrl/Cmd+R shortcut for /rainbow text formatting"
+				:checked="store.state.settings.enableRainbowHotkey"
+			/>
+		</SettingCard>
+
 		<SettingCard title="Custom stylesheet">
 			<div class="setting-card-intro">Override any style with your own CSS</div>
 			<label for="user-specified-css-input" class="sr-only"> Custom stylesheet </label>

@@ -84,13 +84,30 @@ export default <IrcEventHandler>function (irc, network) {
 			type: MessageType.JOIN,
 			self: data.nick === irc.user.nick,
 		});
-		chan.pushMessage(client, msg);
 
 		const isBot = "bot" in (data.tags || {});
-		chan.setUser(new User({nick: data.nick, isBot}));
-		client.emit("users", {
-			chan: chan.id,
-		});
+
+		// User list update callback - executed regardless of buffering
+		const updateUserList = () => {
+			chan.setUser(new User({nick: data.nick, isBot}));
+			client.emit("users", {
+				chan: chan.id,
+			});
+		};
+
+		// Try to process through mass event aggregator
+		const wasBuffered = client.massEventAggregator.processMessage(
+			network,
+			chan,
+			msg,
+			updateUserList
+		);
+
+		if (!wasBuffered) {
+			// Not in mass event mode - process normally
+			chan.pushMessage(client, msg);
+			updateUserList();
+		}
 
 		// When we join a channel, send WHO to get initial away statuses
 		if (data.nick === irc.user.nick) {

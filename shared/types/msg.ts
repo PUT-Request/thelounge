@@ -29,12 +29,17 @@ export enum MessageType {
 	WALLOPS = "wallops",
 	WARN = "warn",
 	NOTE = "note",
+	MASS_EVENT = "mass_event",
 }
 
 import {SharedUser} from "./user";
 
 export type UserInMessage = Partial<SharedUser> & {
 	mode: string;
+	shoutbox?: boolean;
+	original_nick?: string;
+	displayNick?: string;
+	senderType?: "bot";
 };
 
 export type LinkPreview = {
@@ -53,6 +58,21 @@ export type LinkPreview = {
 	maxSize?: number;
 	thumbActualUrl?: string;
 };
+
+export interface MassEventSummary {
+	joins: number;
+	parts: number;
+	quits: number;
+	modes: number;
+	nicks: number;
+	kicks: number;
+	chghosts: number;
+	away: number;
+	back: number;
+	duration: number;
+	startTime: Date;
+	endTime: Date;
+}
 
 export type SharedMsg = {
 	from?: UserInMessage;
@@ -99,4 +119,5 @@ export type SharedMsg = {
 	replyToNick?: string;
 	replyToText?: string;
 	multiline?: boolean;
+	massEventSummary?: MassEventSummary;
 };

@@ -12,7 +12,8 @@
 		]"
 		:data-type="message.type"
 		:data-command="message.command"
-		:data-from="message.from && message.from.nick"
+		:data-from="prettyMessage.from && prettyMessage.from.nick"
+		:data-bridged="prettyMessage.from?.shoutbox"
 		:data-msgid="message.msgid"
 		@touchstart.passive="onTouchStart"
 		@touchend="onTouchEnd"
@@ -35,7 +36,7 @@
 		</template>
 		<template v-else-if="isAction()">
 			<span class="from"><span class="only-copy" aria-hidden="true">***&nbsp;</span></span>
-			<component :is="messageComponent" :network="network" :message="message" />
+			<component :is="messageComponent" :network="network" :message="prettyMessage" />
 		</template>
 		<template v-else-if="message.type === 'action'">
 			<span class="from"><span class="only-copy">*&nbsp;</span></span>
@@ -48,11 +49,11 @@
 				/>
 				<StatusmsgMarker :group="message.statusmsgGroup" />
 				<Username
-					:user="message.from"
+					:user="prettyMessage.from"
 					:network="network"
 					:channel="channel"
 					dir="auto"
-				/>&#32;<ParsedMessage :message="message" />
+				/>&#32;<ParsedMessage :message="prettyMessage" />
 				<LinkPreview
 					v-for="preview in message.previews"
 					:key="preview.link"
@@ -64,23 +65,23 @@
 		</template>
 		<template v-else>
 			<span v-if="message.type === 'message'" class="from">
-				<template v-if="message.from && message.from.nick">
+				<template v-if="prettyMessage.from && prettyMessage.from.nick">
 					<span class="only-copy" aria-hidden="true">&lt;</span>
-					<Username :user="message.from" :network="network" :channel="channel" />
+					<Username :user="prettyMessage.from" :network="network" :channel="channel" />
 					<span class="only-copy" aria-hidden="true">&gt;&nbsp;</span>
 				</template>
 			</span>
 			<span v-else-if="message.type === 'plugin'" class="from">
-				<template v-if="message.from && message.from.nick">
+				<template v-if="prettyMessage.from && prettyMessage.from.nick">
 					<span class="only-copy" aria-hidden="true">[</span>
-					{{ message.from.nick }}
+					{{ prettyMessage.from.nick }}
 					<span class="only-copy" aria-hidden="true">]&nbsp;</span>
 				</template>
 			</span>
 			<span v-else class="from">
-				<template v-if="message.from && message.from.nick">
+				<template v-if="prettyMessage.from && prettyMessage.from.nick">
 					<span class="only-copy" aria-hidden="true">-</span>
-					<Username :user="message.from" :network="network" :channel="channel" />
+					<Username :user="prettyMessage.from" :network="network" :channel="channel" />
 					<span class="only-copy" aria-hidden="true">-&nbsp;</span>
 				</template>
 			</span>
@@ -98,7 +99,7 @@
 					><span></span
 				></span>
 				<StatusmsgMarker :group="message.statusmsgGroup" />
-				<ParsedMessage :network="network" :message="message" />
+				<ParsedMessage :network="network" :message="prettyMessage" />
 				<LinkPreview
 					v-for="preview in message.previews"
 					:key="preview.link"
@@ -132,7 +133,9 @@ import StatusmsgMarker from "./StatusmsgMarker.vue";
 
 import type {ClientChan, ClientMessage, ClientNetwork} from "../js/types";
 import {MessageType} from "../../shared/types/msg";
+import {ChanType} from "../../shared/types/chan";
 import {useStore} from "../js/store";
+import {parser as shoutboxParser} from "../js/helpers/shoutbox-bridge/parser";
 
 MessageTypes.ParsedMessage = ParsedMessage;
 MessageTypes.LinkPreview = LinkPreview;
@@ -180,6 +183,27 @@ export default defineComponent({
 
 		const messageComponent = computed(() => {
 			return "message-" + (props.message.type || "invalid"); // TODO: force existence of type in sharedmsg
+		});
+
+		const prettyMessage = computed<ClientMessage>(() => {
+			let msg: ClientMessage = props.message;
+
+			if (
+				props.channel?.type === ChanType.CHANNEL &&
+				store.state.settings.beautifyBridgedMessages &&
+				props.message.type === MessageType.MESSAGE
+			) {
+				msg = shoutboxParser(msg) as ClientMessage;
+			}
+
+			if (store.state.settings.beautifyBbcodeMessages && msg.text) {
+				msg = {
+					...msg,
+					bbcodeBeautified: true,
+				};
+			}
+
+			return msg;
 		});
 
 		const canReply = computed(() => {
@@ -288,6 +312,7 @@ export default defineComponent({
 			messageTime,
 			messageTimeLocale,
 			messageComponent,
+			prettyMessage,
 			canReply,
 			parentInHistory,
 			isAction,

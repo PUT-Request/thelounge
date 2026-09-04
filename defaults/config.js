@@ -202,6 +202,28 @@ module.exports = {
 		baseUrl: null,
 	},
 
+	// ### `allowFileUploadBackendSelection`
+	//
+	// Allow changing the backend for uploaded file hosting.
+	//
+	// This value is set to `true` by default.
+	allowFileUploadBackendSelection: true,
+
+	// ### `maskFileHost`
+	//
+	// Allow masking the file host with the `fileUpload.baseUrl`
+	//
+	// When set to `true` the host for uploaded files (non local) will be replaced with the
+	// `fileUpload.baseUrl` This only useful if you are proxying externally hosted files
+	// with a custom URL. You should leave this as `false` unless you know what you are doing.
+	//
+	// Example:
+	//   With `fileUpload.baseUrl` set to `my.custom.url` and using `example.com` file host
+	//   `https://img.example.com/QZNFCc.png` becomes `https://my.custom.url/QZNFCc.png`
+	//
+	// This value is set to `false` by default.
+	maskFileHost: false,
+
 	// ### `transports`
 	//
 	// Set `socket.io` transports.
@@ -324,6 +346,33 @@ module.exports = {
 		deletionPolicy: "statusOnly",
 	},
 
+	// ### `massEventDetection`
+	//
+	// Configure detection and aggregation of mass IRC events (netsplits/reconnects).
+	// When enabled, rapid consecutive status messages are buffered and displayed as
+	// a single summary message instead of flooding the chat with individual messages.
+	//
+	// The available keys for the `massEventDetection` object are:
+	//
+	// - `enable`: When set to `true`, mass event detection is active.
+	// - `threshold`: Number of status messages within the window that triggers
+	//   mass event mode.
+	// - `windowMs`: Time window in milliseconds for counting messages toward threshold.
+	// - `cooldownMs`: Time in milliseconds of inactivity before ending a mass event.
+	// - `maxDurationMs`: Maximum duration of a mass event in milliseconds (safety limit).
+	// - `refreshNamesAfter`: Whether to send NAMES after mass event ends to refresh
+	//   the user list.
+	//
+	// This value is set to enable mass event detection by default:
+	massEventDetection: {
+		enable: true,
+		threshold: 10,
+		windowMs: 10000,
+		cooldownMs: 10000,
+		maxDurationMs: 300000,
+		refreshNamesAfter: true,
+	},
+
 	// ### `useHexIp`
 	//
 	// When set to `true`, users' IP addresses will be encoded as hex.
@@ -371,6 +420,163 @@ module.exports = {
 	//
 	// This value is set to `null` to disable WEBIRC by default.
 	webirc: null,
+
+	// ## Torrent sites default configuration
+	// This is the default link to the profile page, this is used for the profile link in the context menu
+	// The link will be generated as follows: `https://${domain}${profileUrl}${username}`
+
+	defaultTorrentSiteInfo: {
+		profileUrl: `/users/`,
+	},
+
+	// ## Torrent sites support
+	//
+	// Configure torrent sites for specific IRC networks.
+	// This value is set with a list of known sites by default.
+	torrentSites: [
+		{
+			abbreviation: "ULCX",
+			name: "Upload.cx",
+			host: "irc.upload.cx",
+			domain: "upload.cx",
+			channels: ["#Announce", "#ULCX", "#Support"],
+		},
+		{
+			abbreviation: "RFX",
+			name: "Reelflix",
+			host: "irc.reelflix.cc",
+			domain: "reelflix.cc",
+		},
+		{
+			abbreviation: "SP",
+			name: "Seedpool",
+			host: "irc.seedpool.org",
+			domain: "seedpool.org",
+		},
+		{
+			abbreviation: "HHD",
+			name: "HomieHelpdesk",
+			host: "irc.homiehelpdesk.net",
+			domain: "homiehelpdesk.net",
+		},
+		{
+			abbreviation: "DP",
+			name: "DarkPeers",
+			host: "irc.darkpeers.org",
+			domain: "darkpeers.org",
+		},
+		{
+			abbreviation: "DT",
+			name: "DesiTorrents",
+			host: "irc.desitorrents.tv",
+			domain: "desitorrents.tv",
+			profileUrl: `/@`,
+		},
+		{
+			abbreviation: "BLU",
+			name: "Blutopia",
+			host: "irc.p2p-network.net",
+			domain: "blutopia.cc",
+			channels: ["#blutopia"],
+		},
+		{
+			abbreviation: "RAS",
+			name: "Rastastugan",
+			host: "irc.rizon.net",
+			domain: "rastastugan.org",
+			channels: ["#rastastugan"],
+		},
+		{
+			abbreviation: "LST",
+			name: "LST",
+			host: "irc.lst.gg",
+			domain: "lst.gg",
+		},
+		{
+			abbreviation: "LUME",
+			name: "Luminarr",
+			host: "irc.luminarr.me",
+			domain: "luminarr.me",
+		},
+		{
+			abbreviation: "STC",
+			name: "Skip The Commercials",
+			host: "irc.skipthecommercials.xyz",
+			domain: "skipthecommercials.xyz",
+		},
+		{
+			abbreviation: "RHD",
+			name: "Rocket HD",
+			host: "irc.rocket-hd.cc",
+			domain: "rocket-hd.cc",
+		},
+		{
+			abbreviation: "A4K",
+			name: "Aura4K",
+			host: "irc.aura4k.net",
+			domain: "aura4k.net",
+		},
+		{
+			abbreviation: "MNS",
+			name: "MidnightScene",
+			host: "irc.midnightscene.cc",
+			domain: "midnightscene.cc",
+		},
+		{
+			abbreviation: "OE+",
+			name: "OnlyEncodes+",
+			host: "irc.onlyencodes.cc",
+			domain: "onlyencodes.cc",
+		},
+		{
+			abbreviation: "IHD",
+			name: "InfinityHD",
+			host: "irc.infinityhd.net",
+			domain: "infinityhd.net",
+		},
+		{
+			abbreviation: "YUS",
+			name: "Yu-Scene",
+			host: "irc.yu-scene.net",
+			domain: "yu-scene.net",
+		},
+		{
+			abbreviation: "ZNTH",
+			name: "Zenith",
+			host: "irc.znth.cx",
+			domain: "znth.cx",
+		},
+		{
+			disabled: true,
+			abbreviation: "ANT",
+			name: "Anthelion",
+			host: "irc.nebulance.io",
+			domain: "anthelion.me",
+			channels: [
+				"#ant",
+				"#ant-announce",
+				"#ant-help",
+				"#ant-disabled",
+				"#ant-invites",
+				"#ant-shout",
+			],
+		},
+		{
+			disabled: true,
+			abbreviation: "RED",
+			name: "Redacted",
+			host: "irc.scratch-network.net",
+			domain: "redacted.sh",
+			channels: ["#redacted"],
+		},
+		{
+			disabled: true,
+			abbreviation: "MAM",
+			name: "MyAnonamouse",
+			host: "irc.myanonamouse.net",
+			domain: "myanonamouse.net",
+		},
+	],
 
 	// ## identd and oidentd support
 

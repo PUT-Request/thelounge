@@ -8,13 +8,20 @@ import Client from "../client";
 import Network from "./network";
 import Prefix from "./prefix";
 import {MessageType, SharedMsg} from "../../shared/types/msg";
-import {ChanType, SpecialChanType, ChanState} from "../../shared/types/chan";
+import {
+	ChanType,
+	SpecialChanType,
+	ChanState,
+	UserGroup,
+	TorrentSiteInfo,
+} from "../../shared/types/chan";
 import {SharedNetworkChan} from "../../shared/types/network";
 
 export type ChanConfig = {
 	name: string;
 	key?: string;
 	muted?: boolean;
+	pinned?: boolean;
 	type?: string;
 };
 
@@ -32,6 +39,7 @@ class Chan {
 	muted!: boolean;
 	type!: ChanType;
 	state!: ChanState;
+	pinned!: boolean;
 	// Whether history was ever loaded from the message provider for this
 	// session. connect() only eager-loads the last-active channel per
 	// network now; other channels load on first open(). Not persisted
@@ -44,6 +52,8 @@ class Chan {
 	data?: any;
 	closed?: boolean;
 	num_users?: number;
+	groups?: UserGroup[];
+	torrentSite?: TorrentSiteInfo;
 
 	constructor(attr?: Partial<Chan>) {
 		_.defaults(this, attr, {
@@ -59,6 +69,8 @@ class Chan {
 			highlight: 0,
 			users: new Map(),
 			muted: false,
+			pinned: false,
+			torrentSite: undefined,
 			userAway: null,
 			historyLoaded: false,
 		});
@@ -203,9 +215,20 @@ class Chan {
 	 */
 	getFilteredClone(
 		lastActiveChannel?: number | boolean,
-		lastMessage?: number
+		lastMessage?: number,
+		host?: string
 	): SharedNetworkChan {
 		let msgs: SharedMsg[];
+
+		let computedTorrentSite = this.torrentSite;
+
+		if (host) {
+			const cfg: any = Config as any;
+
+			if (typeof cfg.getTorrentSiteInfo === "function") {
+				computedTorrentSite = cfg.getTorrentSiteInfo(host, this.name);
+			}
+		}
 
 		// If client is reconnecting, only send new messages that client has not seen yet
 		if (lastMessage && lastMessage > -1) {
@@ -233,6 +256,7 @@ class Chan {
 			muted: this.muted,
 			type: this.type,
 			state: this.state,
+			pinned: this.pinned,
 
 			isOnline: this.isOnline,
 			userAway: this.userAway,
@@ -240,6 +264,8 @@ class Chan {
 			data: this.data,
 			closed: this.closed,
 			num_users: this.num_users,
+			groups: this.groups,
+			torrentSite: computedTorrentSite,
 		};
 		// TODO: funny array mutation below might need to be reproduced
 		// static optionalProperties = ["userAway", "special", "data", "closed", "num_users"];

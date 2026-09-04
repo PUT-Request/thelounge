@@ -1,6 +1,6 @@
 import type {TypingStatus} from "./typing";
 import {SharedMention} from "./mention";
-import {ChanState, SharedChan} from "./chan";
+import {ChanState, SharedChan, UserGroup} from "./chan";
 import {SharedNetwork, SharedServerOptions} from "./network";
 import {SharedMsg, LinkPreview} from "./msg";
 import {SharedUser} from "./user";
@@ -32,6 +32,7 @@ interface ServerToClientEvents {
 
 	"channel:state": EventHandler<{chan: number; state: ChanState}>;
 	"channel:rename": EventHandler<{chan: number; name: string}>;
+	"channel:groups": EventHandler<{chan: number; groups: UserGroup[]}>;
 
 	"change-password": EventHandler<{success: boolean; error?: any}>;
 
@@ -52,6 +53,7 @@ interface ServerToClientEvents {
 	"history:clear": EventHandler<{target: number}>;
 
 	"mute:changed": EventHandler<{target: number; status: boolean}>;
+	"pin:changed": EventHandler<{target: number; status: boolean}>;
 
 	names: EventHandler<{id: number; users: SharedUser[]}>;
 
@@ -170,6 +172,8 @@ interface ClientToServerEvents {
 	"upload:ping": (token: string) => void;
 
 	"mute:change": EventHandler<{target: number; setMutedTo: boolean}>;
+
+	"pin:change": EventHandler<{target: number; setPinnedTo: boolean}>;
 
 	"push:register": EventHandler<PushSubscriptionJSON>;
 	"push:unregister": NoPayloadEventHandler;

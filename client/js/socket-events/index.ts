@@ -26,4 +26,6 @@ import "./history_clear";
 import "./mentions";
 import "./search";
 import "./mute_changed";
+import "./pin_changed";
+import "./channel_groups";
 import "./typing";

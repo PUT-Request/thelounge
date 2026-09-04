@@ -21,9 +21,25 @@ export default <IrcEventHandler>function (irc, network) {
 				hostmask: data.ident + "@" + data.hostname,
 				from: user,
 			});
-			chan.pushMessage(client, msg);
 
-			chan.removeUser(user);
+			// User list update callback - executed regardless of buffering
+			const updateUserList = () => {
+				chan.removeUser(user);
+			};
+
+			// Try to process through mass event aggregator
+			const wasBuffered = client.massEventAggregator.processMessage(
+				network,
+				chan,
+				msg,
+				updateUserList
+			);
+
+			if (!wasBuffered) {
+				// Not in mass event mode - process normally
+				chan.pushMessage(client, msg);
+				updateUserList();
+			}
 		});
 
 		// If user with the nick we are trying to keep has quit, try to get this nick

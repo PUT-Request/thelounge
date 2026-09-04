@@ -8,6 +8,8 @@ type SharedConfigurationBase = {
 	useHexIp: boolean;
 	prefetch: boolean;
 	fileUpload: boolean;
+	allowFileUploadBackendSelection?: boolean;
+	maskFileHost?: boolean;
 	ldapEnabled: boolean;
 	isUpdateAvailable: boolean;
 	applicationServerKey: string;

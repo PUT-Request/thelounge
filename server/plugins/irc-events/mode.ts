@@ -85,64 +85,79 @@ export default <IrcEventHandler>function (irc, network) {
 			msg.users = users;
 		}
 
-		targetChan.pushMessage(client, msg);
+		// Mode update logic - needs to run regardless of buffering
+		const updateModes = () => {
+			let usersUpdated = false;
+			const userModeSortPriority = {};
+			const supportsMultiPrefix = network.irc.network.cap.isEnabled("multi-prefix");
 
-		let usersUpdated = false;
-		const userModeSortPriority = {};
-		const supportsMultiPrefix = network.irc.network.cap.isEnabled("multi-prefix");
+			irc.network.options.PREFIX.forEach((prefix, index) => {
+				userModeSortPriority[prefix.symbol] = index;
+			});
 
-		irc.network.options.PREFIX.forEach((prefix, index) => {
-			userModeSortPriority[prefix.symbol] = index;
-		});
+			data.modes.forEach((mode) => {
+				const add = mode.mode[0] === "+";
+				const char = mode.mode[1];
 
-		data.modes.forEach((mode) => {
-			const add = mode.mode[0] === "+";
-			const char = mode.mode[1];
+				if (char === "k") {
+					targetChan.key = add ? mode.param : "";
+					client.save();
+				}
 
-			if (char === "k") {
-				targetChan.key = add ? mode.param : "";
-				client.save();
-			}
+				if (!mode.param) {
+					return;
+				}
 
-			if (!mode.param) {
+				const user = targetChan.findUser(mode.param);
+
+				if (!user) {
+					return;
+				}
+
+				usersUpdated = true;
+
+				if (!supportsMultiPrefix) {
+					return;
+				}
+
+				const changedMode = network.serverOptions.PREFIX.modeToSymbol[char];
+
+				if (!add) {
+					_.pull(user.modes, changedMode);
+				} else if (!user.modes.includes(changedMode)) {
+					user.modes.push(changedMode);
+					user.modes.sort(function (a, b) {
+						return userModeSortPriority[a] - userModeSortPriority[b];
+					});
+				}
+			});
+
+			if (!usersUpdated) {
 				return;
 			}
-
-			const user = targetChan.findUser(mode.param);
-
-			if (!user) {
-				return;
-			}
-
-			usersUpdated = true;
 
 			if (!supportsMultiPrefix) {
-				return;
-			}
-
-			const changedMode = network.serverOptions.PREFIX.modeToSymbol[char];
-
-			if (!add) {
-				_.pull(user.modes, changedMode);
-			} else if (!user.modes.includes(changedMode)) {
-				user.modes.push(changedMode);
-				user.modes.sort(function (a, b) {
-					return userModeSortPriority[a] - userModeSortPriority[b];
+				// TODO: This is horrible
+				irc.raw("NAMES", data.target);
+			} else {
+				client.emit("users", {
+					chan: targetChan.id,
 				});
 			}
-		});
+		};
 
-		if (!usersUpdated) {
-			return;
-		}
+		// Try to process through mass event aggregator
+		const wasBuffered = client.massEventAggregator.processMessage(
+			network,
+			targetChan,
+			msg,
+			updateModes
+		);
 
-		if (!supportsMultiPrefix) {
-			// TODO: This is horrible
-			irc.raw("NAMES", data.target);
-		} else {
-			client.emit("users", {
-				chan: targetChan.id,
-			});
+		if (!wasBuffered) {
+			// Not in mass event mode - process normally
+			targetChan.pushMessage(client, msg);
+			updateModes();
 		}
 	});
 };

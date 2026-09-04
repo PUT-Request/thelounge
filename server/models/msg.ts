@@ -1,5 +1,5 @@
 import _ from "lodash";
-import {MessageType, LinkPreview, UserInMessage} from "../../shared/types/msg";
+import {MessageType, LinkPreview, UserInMessage, MassEventSummary} from "../../shared/types/msg";
 
 class Msg {
 	from!: UserInMessage;
@@ -43,6 +43,7 @@ class Msg {
 	statusmsgGroup?: string;
 	params!: string[];
 	multiline?: boolean;
+	massEventSummary?: MassEventSummary;
 
 	constructor(attr?: Partial<Msg>) {
 		// Some properties need to be copied in the Msg object instead of referenced

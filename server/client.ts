@@ -17,6 +17,7 @@ import inputs from "./plugins/inputs";
 import PublicClient from "./plugins/packages/publicClient";
 import SqliteMessageStorage from "./plugins/messageStorage/sqlite";
 import TextFileMessageStorage from "./plugins/messageStorage/text";
+import MassEventAggregator from "./plugins/massEventAggregator";
 import Network, {IgnoreListItem, NetworkConfig, NetworkWithIrcFramework} from "./models/network";
 import ClientManager from "./clientManager";
 import {MessageStorage} from "./plugins/messageStorage/types";
@@ -50,6 +51,8 @@ const events = [
 	"part",
 	"quit",
 	"sasl",
+	"spgroups",
+	"spjoin",
 	"tagmsg",
 	"topic",
 	"welcome",
@@ -108,6 +111,7 @@ class Client {
 	highlightRegex!: RegExp | null;
 	highlightExceptionRegex!: RegExp | null;
 	messageProvider?: SqliteMessageStorage;
+	massEventAggregator!: MassEventAggregator;
 
 	fileHash!: string;
 
@@ -134,6 +138,9 @@ class Client {
 
 		client.config.log = Boolean(client.config.log);
 		client.config.password = String(client.config.password);
+
+		// Initialize mass event aggregator for handling netsplits/mass reconnects
+		client.massEventAggregator = new MassEventAggregator(client);
 
 		if (!Config.values.public && client.config.log) {
 			if (Config.values.messageStorage.includes("sqlite")) {
@@ -293,6 +300,7 @@ class Client {
 						key: chan.key || "",
 						type: type,
 						muted: chan.muted,
+						pinned: (chan as any).pinned,
 					})
 				);
 			});

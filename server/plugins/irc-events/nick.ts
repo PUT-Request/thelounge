@@ -63,15 +63,31 @@ export default <IrcEventHandler>function (irc, network) {
 				type: MessageType.NICK,
 				new_nick: data.new_nick,
 			});
-			chan.pushMessage(client, msg);
 
-			chan.removeUser(user);
-			user.nick = data.new_nick;
-			chan.setUser(user);
+			// User list update callback - executed regardless of buffering
+			const updateUserList = () => {
+				chan.removeUser(user);
+				user.nick = data.new_nick;
+				chan.setUser(user);
 
-			client.emit("users", {
-				chan: chan.id,
-			});
+				client.emit("users", {
+					chan: chan.id,
+				});
+			};
+
+			// Try to process through mass event aggregator
+			const wasBuffered = client.massEventAggregator.processMessage(
+				network,
+				chan,
+				msg,
+				updateUserList
+			);
+
+			if (!wasBuffered) {
+				// Not in mass event mode - process normally
+				chan.pushMessage(client, msg);
+				updateUserList();
+			}
 		});
 	});
 };

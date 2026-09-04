@@ -139,6 +139,21 @@ const defaultConfig = {
 	uploadCanvas: {
 		default: true,
 	},
+	uploadTo: {
+		default: "new",
+	},
+	uploadToken: {
+		default: "",
+	},
+	uploadTTL: {
+		default: "",
+	},
+	uploadTTLCustom: {
+		default: "",
+	},
+	uploadURL: {
+		default: "",
+	},
 	userStyles: {
 		default: "",
 		apply(store: TypedStore, value: string) {
@@ -153,6 +168,30 @@ const defaultConfig = {
 	},
 	searchEnabled: {
 		default: false,
+	},
+	filterdmsEnabled: {
+		default: true,
+	},
+	showAllDMs: {
+		default: false,
+	},
+	beautifyBridgedMessages: {
+		default: true,
+	},
+	beautifyBbcodeMessages: {
+		default: true,
+	},
+	bridgedMessageNicksStyle: {
+		default: "parentheses",
+	},
+	enhancedUserListEnabled: {
+		default: true,
+	},
+	enhancedContextMenuEnabled: {
+		default: true,
+	},
+	enableRainbowHotkey: {
+		default: true,
 	},
 };
 

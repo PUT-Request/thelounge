@@ -2,6 +2,29 @@ import {SharedMsg} from "./msg";
 import {SharedUser} from "./user";
 import {SharedNetworkChan} from "./network";
 
+// User groups sent by seedpool/enhanced capable servers
+export type UserGroup = {
+	name: string;
+	position: number;
+	users: string[];
+};
+
+export type DefaultTorrentSiteInfo = {
+	profileUrl: string;
+};
+
+export type TorrentSite = {
+	disabled?: boolean;
+	abbreviation: string;
+	name: string;
+	host: string;
+	domain: string;
+	channels?: string[];
+	profileUrl?: string;
+};
+
+export type TorrentSiteInfo = TorrentSite & DefaultTorrentSiteInfo;
+
 export enum ChanType {
 	CHANNEL = "channel",
 	LOBBY = "lobby",
@@ -34,6 +57,7 @@ export type SharedChan = {
 	muted: boolean;
 	type: ChanType;
 	state: ChanState;
+	pinned: boolean;
 
 	isOnline?: boolean | null;
 	userAway?: string | null;
@@ -41,4 +65,6 @@ export type SharedChan = {
 	data?: any;
 	closed?: boolean;
 	num_users?: number;
+	groups?: UserGroup[];
+	torrentSite?: TorrentSiteInfo;
 };

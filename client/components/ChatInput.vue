@@ -90,6 +90,7 @@ const formattingHotkeys = {
 	"mod+o": "\x0F",
 	"mod+s": "\x1e",
 	"mod+m": "\x11",
+	"mod+r": "/rainbow",
 };
 
 // Autocomplete bracket and quote characters like in a modern IDE
@@ -378,11 +379,29 @@ export default defineComponent({
 
 			const inputTrap = Mousetrap(input.value);
 
-			inputTrap.bind(Object.keys(formattingHotkeys), function (e, key) {
-				const modifier = formattingHotkeys[key];
+			let enabledHotkeys: string[] = Object.keys(formattingHotkeys);
+
+			// Allow disabling /rainbow hotkey
+			if (store.state.settings.enableRainbowHotkey === false) {
+				enabledHotkeys = enabledHotkeys.filter((k) => k !== "mod+r");
+			}
+
+			inputTrap.bind(enabledHotkeys, function (e, key) {
+				const modifier = (formattingHotkeys as Record<string, string>)[key];
 
 				if (!e.target) {
 					return;
+				}
+
+				if (modifier === "/rainbow" && input.value) {
+					if (input.value.value.startsWith(modifier)) {
+						return false;
+					}
+
+					input.value.value = modifier + " " + input.value.value;
+					setPendingMessage(e);
+
+					return false;
 				}
 
 				wrapCursor(

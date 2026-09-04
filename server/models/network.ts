@@ -322,6 +322,7 @@ class Network {
 			"znc.in/self-message", // Legacy echo-message for ZNC
 			"znc.in/playback", // See http://wiki.znc.in/Playback
 			"extended-monitor", // https://ircv3.net/specs/extensions/extended-monitor
+			"seedpool/enhanced", // THC enhanced client features (user groups)
 		]);
 	}
 
@@ -525,7 +526,7 @@ class Network {
 			serverOptions: this.serverOptions,
 			status: this.getNetworkStatus(),
 			channels: this.channels.map((channel) =>
-				channel.getFilteredClone(lastActiveChannel, lastMessage)
+				channel.getFilteredClone(lastActiveChannel, lastMessage, this.host)
 			),
 		};
 	}
@@ -667,6 +668,7 @@ class Network {
 					keys.push("key");
 				} else if (chan.type === ChanType.QUERY) {
 					keys.push("type");
+					keys.push("pinned");
 				}
 
 				return _.pick(chan, keys);
