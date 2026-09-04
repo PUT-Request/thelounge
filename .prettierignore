@@ -26,5 +26,6 @@ yarn.lock
 .browserslistrc
 .node-version
 .yarnrc
+.dockerignore
 
 *.css
