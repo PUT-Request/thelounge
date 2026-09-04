@@ -1,13 +1,13 @@
 <template>
 	<span
 		:class="['user', {[nickColor]: store.state.settings.coloredNicks}, {active: active}]"
-		:data-name="user.nick"
+		:data-name="user.displayNick || user.nick"
 		role="button"
 		v-on="onHover ? {mouseenter: hover} : {}"
 		@click.prevent="openContextMenu"
 		@contextmenu.prevent="openContextMenu"
 		><template v-if="html"><span class="nick" v-html="html"></span></template
-		><template v-else>{{ mode }}{{ user.nick }}</template
+		><template v-else>{{ displayNick }}</template
 		><span v-if="user.isBot" class="user-bot-indicator" title="Bot"> [bot]</span
 		><StatusIcon v-if="includeStatusIcon" :away="!!user.away" tooltip-dir="w" :online="true"
 	/></span>
@@ -16,6 +16,7 @@
 <script lang="ts">
 import {computed, defineComponent, PropType} from "vue";
 import {UserInMessage} from "../../shared/types/msg";
+import {ChanState} from "../../shared/types/chan";
 import eventbus from "../js/eventbus";
 import colorClass from "../js/helpers/colorClass";
 import type {ClientChan, ClientNetwork} from "../js/types";
@@ -80,8 +81,47 @@ export default defineComponent({
 
 		const store = useStore();
 
+		// Add bridged users to autocomplete (need to switch channel after
+		// connect if channel active on connect)
+		if (
+			store.state.settings.beautifyBridgedMessages &&
+			props.user.shoutbox &&
+			store.state.activeChannel?.channel.state === ChanState.JOINED &&
+			!store.state.activeChannel?.channel.users.find((u) => u.nick === props.user.nick)
+		) {
+			store.state.activeChannel?.channel.users.push({
+				nick: props.user.nick!,
+				modes: [],
+				mode: "",
+				away: "",
+				lastMessage: Date.now(),
+				isBot: false,
+			});
+		}
+
+		// Allow adjusting nick display via setting
+		const displayNick = computed(() => {
+			if (props.user.displayNick) {
+				return props.user.displayNick;
+			}
+
+			const umode = mode.value ?? "";
+			const nick = props.user.nick!;
+
+			if (
+				store.state.settings.beautifyBridgedMessages &&
+				props.user.shoutbox &&
+				store.state.settings.bridgedMessageNicksStyle === "parentheses"
+			) {
+				return `(${umode}${nick})`;
+			}
+
+			return `${umode}${nick}`;
+		});
+
 		return {
 			mode,
+			displayNick,
 			nickColor,
 			hover,
 			openContextMenu,

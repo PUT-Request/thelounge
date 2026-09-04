@@ -57,6 +57,22 @@ export default defineComponent({
 			});
 
 			for (const message of props.messages) {
+				// Mass event summaries already aggregate status messages,
+				// fold their counts back into the condensed totals
+				if (message.type === MessageType.MASS_EVENT && message.massEventSummary) {
+					const summary = message.massEventSummary;
+					obj.join += summary.joins;
+					obj.part += summary.parts;
+					obj.quit += summary.quits;
+					obj.mode += summary.modes;
+					obj.nick += summary.nicks;
+					obj.kick += summary.kicks;
+					obj.chghost += summary.chghosts;
+					obj.away += summary.away;
+					obj.back += summary.back;
+					continue;
+				}
+
 				// special case since one MODE message can change multiple modes
 				if (message.type === MessageType.MODE) {
 					// syntax: +vv-t maybe-some targets

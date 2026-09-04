@@ -26,6 +26,107 @@
 				description="Re-render images to remove EXIF data before uploading. May affect orientation in older browsers."
 				:checked="store.state.settings.uploadCanvas"
 			/>
+			<template v-if="store.state.serverConfiguration?.allowFileUploadBackendSelection">
+				<label for="uploadTo" class="setting-row-text">
+					<div class="setting-row-label">Upload backend</div>
+					<div class="setting-row-description">Service used to host uploaded files</div>
+				</label>
+				<select
+					id="uploadTo"
+					:value="store.state.settings.uploadTo"
+					name="uploadTo"
+					class="input"
+				>
+					<option
+						v-for="provider in UploadProviders"
+						:key="provider.id"
+						:value="provider.id"
+					>
+						{{ provider.displayName }}
+					</option>
+				</select>
+				<div v-if="currentUploadBackend?.supportNote" class="setting-row-description">
+					<p v-for="note in currentUploadBackend?.supportNote?.split('\n')" :key="note">
+						{{ note }}
+					</p>
+				</div>
+				<div v-if="currentUploadBackend?.requiresURL">
+					<label for="uploadURL" class="setting-row-text">
+						<div class="setting-row-label">Upload API URL</div>
+						<div class="setting-row-description">
+							The URL to use to upload to the service
+						</div>
+					</label>
+					<input
+						id="uploadURL"
+						:value="store.state.settings.uploadURL"
+						autocomplete="off"
+						type="text"
+						name="uploadURL"
+						class="input"
+						placeholder="Enter api upload url"
+					/>
+				</div>
+				<div v-if="currentUploadBackend?.requiresToken">
+					<label for="uploadToken" class="setting-row-text">
+						<div class="setting-row-label">Upload API key</div>
+						<div class="setting-row-description">
+							The API key used to authorize uploads to the selected service
+						</div>
+					</label>
+					<div class="password-container">
+						<RevealPassword v-slot:default="slotProps">
+							<input
+								id="uploadToken"
+								:value="store.state.settings.uploadToken"
+								autocomplete="off"
+								:type="slotProps.isVisible ? 'text' : 'password'"
+								name="uploadToken"
+								class="input"
+								placeholder="Enter api auth key"
+							/>
+						</RevealPassword>
+					</div>
+				</div>
+				<div v-if="currentUploadBackend?.validTtl">
+					<label for="uploadTTL" class="setting-row-text">
+						<div class="setting-row-label">Upload retention</div>
+						<div class="setting-row-description">
+							How long the upload exists before it is removed
+						</div>
+					</label>
+					<select
+						id="uploadTTL"
+						:value="store.state.settings.uploadTTL"
+						name="uploadTTL"
+						class="input"
+					>
+						<option
+							v-for="ttl in currentUploadBackend.validTtl"
+							:key="ttl.id"
+							:value="ttl.id"
+						>
+							{{ ttl.displayName }}
+						</option>
+					</select>
+					<div v-if="store.state.settings.uploadTTL === 'custom'">
+						<label for="uploadTTLCustom" class="setting-row-text">
+							<div class="setting-row-label">Custom retention (seconds)</div>
+						</label>
+						<input
+							id="uploadTTLCustom"
+							:value="store.state.settings.uploadTTLCustom"
+							type="number"
+							min="1"
+							step="1"
+							autocomplete="off"
+							name="uploadTTLCustom"
+							class="input"
+							placeholder="e.g. 3600 for 1 hour"
+						/>
+					</div>
+				</div>
+			</template>
 		</SettingCard>
 
 		<!-- Settings sync -->
@@ -117,11 +218,13 @@
 </template>
 
 <script lang="ts">
-import {computed, defineComponent, onMounted, ref} from "vue";
+import {computed, defineComponent, onMounted, onUpdated, ref} from "vue";
 import {useStore} from "../../js/store";
 import {BeforeInstallPromptEvent} from "../../js/types";
+import {UploadProviders} from "../../../shared/upload-providers";
 import SettingCard from "./SettingCard.vue";
 import SettingToggle from "./SettingToggle.vue";
+import RevealPassword from "../RevealPassword.vue";
 
 let installPromptEvent: BeforeInstallPromptEvent | null = null;
 
@@ -135,10 +238,27 @@ export default defineComponent({
 	components: {
 		SettingCard,
 		SettingToggle,
+		RevealPassword,
 	},
 	setup() {
 		const store = useStore();
 		const canRegisterProtocol = ref(false);
+
+		const currentUploadBackend = computed(() => {
+			return UploadProviders.find((b) => b.id === store.state.settings.uploadTo);
+		});
+
+		onUpdated(() => {
+			if (
+				!currentUploadBackend.value?.validTtl?.find(
+					(ttl) => ttl.id === store.state.settings.uploadTTL
+				)
+			) {
+				store.state.settings.uploadTTL =
+					currentUploadBackend.value?.validTtl?.find((ttl) => ttl.default === true)?.id ??
+					"";
+			}
+		});
 
 		const hasInstallPromptEvent = computed(() => {
 			// TODO: This doesn't hide the button after clicking
@@ -200,6 +320,8 @@ export default defineComponent({
 			nativeInstallPrompt,
 			onForceSyncClick,
 			registerProtocol,
+			UploadProviders,
+			currentUploadBackend,
 		};
 	},
 });
