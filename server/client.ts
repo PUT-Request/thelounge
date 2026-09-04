@@ -1,10 +1,11 @@
 import _ from "lodash";
-import UAParser from "ua-parser-js";
+import {UAParser} from "ua-parser-js";
 import escapeRegExp from "lodash/escapeRegExp";
 import crypto from "crypto";
 import colors from "chalk";
 
 import log from "./log";
+import Helper from "./helper";
 import Chan, {ChanConfig} from "./models/chan";
 import Msg from "./models/msg";
 import Config from "./config";
@@ -408,20 +409,22 @@ class Client {
 
 	updateSession(token: string, ip: string, request: any) {
 		const client = this;
-		const agent = UAParser(request.headers["user-agent"] || "");
+		const userAgent = new UAParser(request.headers["user-agent"] || "");
+		const browser = userAgent.getBrowser();
+		const os = userAgent.getOS();
 		let friendlyAgent = "";
 
-		if (agent.browser.name) {
-			friendlyAgent = `${agent.browser.name} ${agent.browser.major || ""}`;
+		if (browser.name) {
+			friendlyAgent = `${browser.name} ${browser.major || ""}`;
 		} else {
 			friendlyAgent = "Unknown browser";
 		}
 
-		if (agent.os.name) {
-			friendlyAgent += ` on ${agent.os.name}`;
+		if (os.name) {
+			friendlyAgent += ` on ${os.name}`;
 
-			if (agent.os.version) {
-				friendlyAgent += ` ${agent.os.version}`;
+			if (os.version) {
+				friendlyAgent += ` ${os.version}`;
 			}
 		}
 

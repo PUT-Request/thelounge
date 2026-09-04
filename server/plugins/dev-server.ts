@@ -18,7 +18,8 @@ export default async (app: express.Application) => {
 
 	app.use(vite.middlewares);
 
-	// eslint-disable-next-line @typescript-eslint/no-misused-promises
+	// Express 5 forwards async handler rejections natively, so no
+	// no-misused-promises suppression is needed here (unlike express 4).
 	app.get("/", async (req, res) => {
 		const rawHtml = fs.readFileSync(fromRoot("client", "index.html"), "utf-8");
 		const html = await vite.transformIndexHtml(req.url, rawHtml);

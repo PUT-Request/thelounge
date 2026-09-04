@@ -25,5 +25,6 @@ yarn.lock
 .gitattributes
 .browserslistrc
 .node-version
+.yarnrc
 
 *.css

@@ -71,12 +71,22 @@ class Uploader {
 
 	// TODO: type
 	static router(this: void, express: any) {
-		express.get("/uploads/:name/:slug*?", Uploader.routeGetFile);
+		// NOTE: express 5 (path-to-regexp v8) no longer accepts the `:slug*?`
+		// modifier syntax, so the optional human-friendly filename suffix is
+		// expressed as two routes instead. `{*slug}` captures zero or more
+		// trailing segments; normalize the array form back to a path.
+		express.get("/uploads/:name", Uploader.routeGetFile);
+		express.get("/uploads/:name/{*slug}", Uploader.routeGetFile);
 		express.post("/uploads/new/:token", Uploader.routeUploadFile);
 	}
 
 	static async routeGetFile(this: void, req: Request, res: Response) {
-		const name = req.params.name;
+		// Express 5 types params as string | string[] (segments can repeat);
+		// normalize back to a single value. A joined multi-segment `name`
+		// can never match the hex regex below, so this stays a 404.
+		const firstParam = (value: string | string[] | undefined): string =>
+			Array.isArray(value) ? value.join("/") : value ?? "";
+		const name = firstParam(req.params.name);
 
 		const nameRegex = /^[0-9a-f]{16}$/;
 
@@ -95,7 +105,10 @@ class Uploader {
 		}
 
 		// Force a download in the browser if it's not an allowed type (binary or otherwise unknown)
-		let slug = req.params.slug;
+		// The `{*slug}` route captures trailing segments as an array;
+		// join it back (filenames never contain slashes in practice, but the
+		// old `:slug*?` route tolerated them too).
+		let slug = firstParam(req.params.slug) || undefined;
 		const isInline = detectedMimeType in inlineContentDispositionTypes;
 		let disposition = isInline ? "inline" : "attachment";
 
@@ -108,18 +121,6 @@ class Uploader {
 				fallback: false,
 				type: disposition,
 			});
-		}
-
-		// Send a more common mime type for audio files
-		// so that browsers can play them correctly
-		if (detectedMimeType === "audio/vnd.wave") {
-			detectedMimeType = "audio/wav";
-		} else if (detectedMimeType === "audio/x-flac") {
-			detectedMimeType = "audio/flac";
-		} else if (detectedMimeType === "audio/x-m4a") {
-			detectedMimeType = "audio/mp4";
-		} else if (detectedMimeType === "video/quicktime") {
-			detectedMimeType = "video/mp4";
 		}
 
 		res.setHeader("Content-Disposition", disposition);

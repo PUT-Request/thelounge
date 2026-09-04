@@ -60,7 +60,11 @@ describe("Server", function () {
 
 			expect(response.statusCode).to.equal(200);
 			expect(body.name).to.equal("The Lounge");
-			expect(response.headers["content-type"]).to.equal("application/manifest+json");
+			// express 5's static server appends "; charset=utf-8" to JSON-ish
+			// content types - accept it, browsers do.
+			expect(response.headers["content-type"]).to.match(
+				/^application\/manifest\+json(;\s*charset=utf-8)?$/
+			);
 		});
 	});
 
