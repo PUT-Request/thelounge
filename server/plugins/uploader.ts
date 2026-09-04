@@ -10,16 +10,25 @@ import type {Socket} from "socket.io";
 import {Request, Response} from "express";
 import NodeBuffer, {Buffer} from "buffer";
 
-// Map of allowed mime types to their respecive default filenames
-// that will be rendered in browser without forcing them to be downloaded
+// Map of mime types to their more common aliases
+const mimeAliases: {[key: string]: string} = {
+	"audio/vnd.wave": "audio/wav",
+	"audio/x-flac": "audio/flac",
+	"audio/x-m4a": "audio/mp4",
+	"video/quicktime": "video/mp4",
+};
+
+// Map of allowed  mime types to their respecive default filenames
+// that will be rendered in browser without forcing them to be downloaded.
+// Use post alias mime types.
 const inlineContentDispositionTypes = {
 	"application/ogg": "media.ogx",
 	"audio/midi": "audio.midi",
 	"audio/mpeg": "audio.mp3",
 	"audio/ogg": "audio.ogg",
-	"audio/vnd.wave": "audio.wav",
-	"audio/x-flac": "audio.flac",
-	"audio/x-m4a": "audio.m4a",
+	"audio/wav": "audio.wav",
+	"audio/flac": "audio.flac",
+	"audio/mp4": "audio.m4a",
 	"image/bmp": "image.bmp",
 	"image/gif": "image.gif",
 	"image/jpeg": "image.jpg",
@@ -103,6 +112,10 @@ class Uploader {
 		if (detectedMimeType === null) {
 			return res.status(404).send("Not found");
 		}
+
+		// Send a more common mime type for audio files
+		// so that browsers can play them correctly
+		detectedMimeType = mimeAliases[detectedMimeType] || detectedMimeType;
 
 		// Force a download in the browser if it's not an allowed type (binary or otherwise unknown)
 		// The `{*slug}` route captures trailing segments as an array;

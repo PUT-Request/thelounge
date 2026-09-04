@@ -1,5 +1,6 @@
 <template>
 	<div ref="chat" class="chat" tabindex="-1">
+		<h3 class="sr-only">Chat Messages</h3>
 		<div v-show="channel.moreHistoryAvailable" class="show-more">
 			<button
 				ref="loadMoreButton"
@@ -45,9 +46,9 @@
 					:message="entryAt(virtualRow.index) as any"
 					:focused="isFocusedEntry(virtualRow.index)"
 				/>
-				<div v-if="shouldDisplayUnreadMarker(virtualRow.index)" class="unread-marker">
-					<span class="unread-marker-text" />
-				</div>
+				<h4 v-if="shouldDisplayUnreadMarker(virtualRow.index)" class="unread-marker">
+					<span class="unread-marker-text">New messages</span>
+				</h4>
 
 				<MessageCondensed
 					v-if="condensedGroupAt(virtualRow.index)"

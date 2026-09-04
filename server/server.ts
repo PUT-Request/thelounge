@@ -928,7 +928,18 @@ function initializeClient(
 	} else if (!token) {
 		client.generateToken((newToken) => {
 			token = client.calculateTokenHash(newToken);
-			client.attachedClients[socket.id].token = token;
+
+			// generateToken is asynchronous, so the socket may have disconnected while it
+			// was running, in which case clientDetach has already removed the attached
+			// client. There is nothing left to hand the token to: the session would record
+			// a connection that is gone and sendInitEvent would emit into a closed socket.
+			const attachedClient = client.attachedClients[socket.id];
+
+			if (!attachedClient) {
+				return;
+			}
+
+			attachedClient.token = token;
 
 			client.updateSession(token, getClientIp(socket), socket.request);
 			sendInitEvent(newToken);
@@ -1136,6 +1147,7 @@ function performAuthentication(this: Socket, data: AuthPerformData) {
 		return;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-floating-promises
 	Auth.initialize().then(() => {
 		// Perform password checking
 		Auth.auth(manager, client, data.user, data.password, authCallback);

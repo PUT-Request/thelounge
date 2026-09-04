@@ -65,16 +65,18 @@ type ClientPushSubscription = {
 	};
 };
 
+type AttachedClient = {
+	lastUse: number;
+	ip: string;
+	agent: string;
+	pushSubscription?: ClientPushSubscription;
+};
+
 export type UserConfig = {
 	log: boolean;
 	password: string;
 	sessions: {
-		[token: string]: {
-			lastUse: number;
-			ip: string;
-			agent: string;
-			pushSubscription?: ClientPushSubscription;
-		};
+		[token: string]: AttachedClient;
 	};
 	clientSettings: {
 		[key: string]: any;
@@ -352,7 +354,13 @@ class Client {
 		});
 	}
 
-	connectToNetwork(args: Record<string, any>, isStartup = false) {
+	connectToNetwork(
+		args:
+			| Record<keyof NetworkConfig, NetworkConfig[keyof NetworkConfig]>
+			| NetworkConfig
+			| {host: string; port: number; tls: boolean},
+		isStartup = false
+	) {
 		const client = this;
 
 		// Get channel id for lobby before creating other channels for nicer ids
@@ -463,7 +471,7 @@ class Client {
 		});
 	}
 
-	input(data) {
+	input(data: {target: number; text: string; replyTo?: string}) {
 		const client = this;
 		const text: string = data.text;
 
@@ -487,7 +495,7 @@ class Client {
 		});
 	}
 
-	inputLine(data) {
+	inputLine(data: {target: number; text: string; replyTo?: string}) {
 		const client = this;
 		const target = client.find(data.target);
 
@@ -580,6 +588,13 @@ class Client {
 	}
 
 	compileCustomHighlights() {
+		// Scripts that do not delimit words with spaces or punctuation (CJK, Thai,
+		// Lao, Khmer, Myanmar, ...). Tokens containing such characters can appear in
+		// the middle of a run of text with no boundary around them, so they are
+		// matched as a plain substring instead of being wrapped in word boundaries.
+		const noWordBoundary =
+			/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
 		function compileHighlightRegex(customHighlightString: string) {
 			if (typeof customHighlightString !== "string") {
 				return null;
@@ -595,12 +610,31 @@ class Client {
 				return null;
 			}
 
-			return new RegExp(
-				`(?:^|[ .,+!?|/:<>(){}'"@&~-])(?:${highlightsTokens.join(
-					"|"
-				)})(?:$|[ .,+!?|/:<>(){}'"-])`,
-				"i"
-			);
+			// Split tokens into those that need word boundaries (e.g. "foo", which
+			// should not match "football") and those that must match anywhere
+			// because their script has no word boundaries (e.g. "天気").
+			const boundaryTokens: string[] = [];
+			const substringTokens: string[] = [];
+
+			for (const token of highlightsTokens) {
+				(noWordBoundary.test(token) ? substringTokens : boundaryTokens).push(token);
+			}
+
+			const alternatives: string[] = [];
+
+			if (boundaryTokens.length > 0) {
+				alternatives.push(
+					`(?:^|[ .,+!?|/:<>(){}'"@&~-])(?:${boundaryTokens.join(
+						"|"
+					)})(?:$|[ .,+!?|/:<>(){}'"-])`
+				);
+			}
+
+			if (substringTokens.length > 0) {
+				alternatives.push(`(?:${substringTokens.join("|")})`);
+			}
+
+			return new RegExp(alternatives.join("|"), "i");
 		}
 
 		this.highlightRegex = compileHighlightRegex(this.config.clientSettings.highlights);
