@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 <!-- New entries go after this line -->
 
+## Unreleased
+
+### Added
+
+- Message search now uses a SQLite FTS5 trigram sidecar index (`NAME.fts.sqlite3` next to each user's `NAME.sqlite3`, rebuilt automatically and safe to delete) instead of scanning every stored message. Result sets are unchanged, but selective searches no longer scale with total history size. Budget extra disk: the sidecar runs roughly 1-3x the message database depending on text entropy (measured 1.3x on 1M synthetic rows).
+- Search understands `from:<nick>`, `datebefore:<date>`, and `dateafter:<date>` filters, and the search results view gained a jump-to-date picker that builds those filters.
+- Clicking a search result, mention, or notification jumps to it in the channel: messages carry a stable storage id (their SQLite row id, assigned at write time), the server loads a window around it, and the client scrolls to it with a highlight. While viewing history, newer messages can be paged in both directions, live messages are held back to avoid gaps, and the down-arrow button returns to the live end.
+- Search sessions resume: going back to a search restores its results and scroll position instead of re-querying, results auto-load on scroll, and the search box refills with the last term for the channel.
+
+### Fixed
+
+- Time-ordered history queries now break ties by id, so same-millisecond messages paginate and jump deterministically.
+- No longer crashes when a socket detaches during async token generation (the session recorded a dead connection and emitted into a closed socket).
+- Uploaded `video/quicktime` files are served inline as `video/mp4` (via the mime-alias map) instead of forced downloads.
+
+### Changed
+
+- The message list is now virtualized: only rows near the viewport are mounted, so opening or scrolling channels with very large histories no longer freezes the tab. As a deliberate tradeoff (the same one Slack and Discord make), text selection and the browser's native find only cover the visible rows.
+- Channel history loads lazily: reconnecting eager-loads only the last-active channel per network, other channels load on first open. Scrolling past the in-memory buffer pages older history from the database instead of dead-ending, and the scrollback buffer is capped (3x the page size) to bound memory.
+- Recently viewed channels stay fully loaded (5 by default, configurable 0-20 under Settings -> General -> Performance); only channels that age out are trimmed back to 100 messages. Set it to 0 for the old trim-on-every-switch behavior.
+- Status-message folding is now computed incrementally instead of rebuilding the whole list per incoming message.
+- The unread marker is now placed at the true unread boundary (message ids) instead of almost never appearing: previously it compared a render index against a message id, so it effectively never showed.
+- Static assets are served compressed and the realtime channel negotiates per-message deflate, cutting first-paint transfer size.
+- A stale-build banner appears (with reload) when an open tab predates a server redeploy.
+
+### Changed
+
+- Upgraded to Express 5. The uploader's optional filename suffix route was rewritten for the new router syntax (`/uploads/:name` + `/uploads/:name/{*slug}`); static JSON-ish responses may now include a `; charset=utf-8` suffix, which browsers accept.
+- Dependency upgrades: socket.io server and client to 4.8.x (with per-message deflate for large payloads), commander 14, cheerio 1.1, semver 7.7, ua-parser-js 2, bcryptjs 3, mime-types 3, @fastify/busboy 3, lodash 4.18.1 and node-forge 1.4.0 (security), postcss 8.5.23 (security), @types/ws 8.18.1, @types/lodash 4.17.25, @textcomplete 0.1.13, compression (new, for static assets).
+- Merged upstream fixes: token generation no longer crashes on detached sockets; uploader mime aliases; whois host-mask display; screen-reader headings and real-text markers; emoji wrapping; substring highlights for scripts without word boundaries; manifest crossorigin for tunnel setups; loose-`any` type cleanup.
+- Deliberately not upgraded, with reasons: chalk 5 and file-type 21 are ESM-only and the server is CommonJS; filenamify 7 renames on-disk log folders; read 5 and package-json 10 break their callback/metadata APIs; ldapjs stays because the LDAP test harness needs its in-process server (ldapts has none); got stays because link prefetch depends on its streaming abort and local-address bind semantics; web-push-neo is kept (it is newer than web-push); irc-framework stays pinned (the ping-timer fix is already in the pinned commit; the residual reconnect-counter quirk is narrow and not worth a local patch without Yarn Berry's patch protocol); Prettier 3 / ESLint 9 / Vue 3.5 are deferred as high-churn, zero-user-value migrations.
+
 ## v4.6.0-pre.1 - 2026-07-22 [Pre-release]
 
 [See the full changelog](https://github.com/thelounge/thelounge/compare/v4.5.2...v4.6.0-pre.1)
