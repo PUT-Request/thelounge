@@ -1,0 +1,18 @@
+# Styx task configuration
+prompt: |
+  Review all TypeScript files in this repository for common issues:
+  - Unhandled errors
+  - Race conditions
+  - Missing documentation on exported functions
+  
+  For each issue found, create a fix on a new branch.
+  Summarize all changes at the end.
+
+mode: read_write
+
+api_endpoint: ${STYX_API_ENDPOINT:-https://opencode.ai/zen/v1}
+api_key: ${STYX_API_KEY}
+model: nemotron-3.5-lightning-free
+max_context: 128000
+
+max_working_time: 30m
