@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Time-ordered history queries now break ties by id, so same-millisecond messages paginate and jump deterministically.
+- Link previews decode pages using the `Content-Type` charset instead of assuming UTF-8.
 - No longer crashes when a socket detaches during async token generation (the session recorded a dead connection and emitted into a closed socket).
 - Uploaded `video/quicktime` files are served inline as `video/mp4` (via the mime-alias map) instead of forced downloads.
 
