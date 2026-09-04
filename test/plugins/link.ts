@@ -90,6 +90,28 @@ Vivamus bibendum vulputate tincidunt. Sed vitae ligula felis.`;
 		});
 	});
 
+	it("should decode non-UTF-8 pages using the Content-Type charset", function () {
+		return new Promise<void>((resolve) => {
+			const url = _makeUrl("latin1");
+			const message = irc.createMessage({
+				text: url,
+			});
+
+			link(irc, network.channels[0], message, message.text);
+
+			app.get("/latin1", function (req, res) {
+				res.set("Content-Type", "text/html; charset=windows-1252");
+				res.send(Buffer.from("<title>caf\xe9 au lait</title>", "latin1"));
+			});
+
+			irc.once("msg:preview", function (data) {
+				expect(data.preview.type).to.equal("link");
+				expect(data.preview.head).to.equal("café au lait");
+				resolve();
+			});
+		});
+	});
+
 	it("should be able to display body for text/plain", function () {
 		return new Promise<void>((resolve) => {
 			const url = _makeUrl("basic-text");
