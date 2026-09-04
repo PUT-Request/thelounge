@@ -328,6 +328,19 @@ export default defineComponent({
 			blurInput();
 		};
 
+		// Fired by the command palette (and potentially other UI) to drop
+		// text into this channel's input, e.g. a picked `/command `.
+		const onPrefill = (data: {text: string}) => {
+			if (typeof data.text !== "string" || !input.value) {
+				return;
+			}
+
+			props.channel.pendingMessage = data.text;
+			input.value.value = data.text;
+			setInputSize();
+			input.value.focus();
+		};
+
 		const onBlur = () => {
 			if (autocompletionRef.value) {
 				autocompletionRef.value.hide();
@@ -353,6 +366,7 @@ export default defineComponent({
 		onMounted(() => {
 			eventbus.on("escapekey", onEscape);
 			eventbus.on("reply:start", onReplyStart);
+			eventbus.on("chatinput:prefill", onPrefill);
 
 			if (store.state.settings.autocomplete) {
 				if (!input.value) {
@@ -447,6 +461,7 @@ export default defineComponent({
 		onUnmounted(() => {
 			eventbus.off("escapekey", onEscape);
 			eventbus.off("reply:start", onReplyStart);
+			eventbus.off("chatinput:prefill", onPrefill);
 
 			if (autocompletionRef.value) {
 				autocompletionRef.value.destroy();

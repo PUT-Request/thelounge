@@ -8,6 +8,7 @@
 			@click="store.commit('sidebarOpen', false)"
 		/>
 		<router-view ref="loungeWindow"></router-view>
+		<CommandPalette v-if="paletteOpen" @close="paletteOpen = false" />
 		<StaleBuildBanner />
 		<Mentions />
 		<ImageViewer ref="imageViewer" />
@@ -31,6 +32,7 @@ import ContextMenu from "./ContextMenu.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import Mentions from "./Mentions.vue";
 import StaleBuildBanner from "./StaleBuildBanner.vue";
+import CommandPalette from "./CommandPalette.vue";
 import {startStalenessChecks} from "../js/buildStaleness";
 import {
 	computed,
@@ -58,6 +60,7 @@ export default defineComponent({
 		ConfirmDialog,
 		Mentions,
 		StaleBuildBanner,
+		CommandPalette,
 	},
 	setup() {
 		const store = useStore();
@@ -113,6 +116,17 @@ export default defineComponent({
 			}
 		};
 
+		const paletteOpen = ref(false);
+
+		const togglePalette = () => {
+			paletteOpen.value = !paletteOpen.value;
+
+			// Returning false tells Mousetrap to prevent the browser default
+			// (e.g. focusing the address bar is unaffected - this stops
+			// single-key followups, matching the other toggles here).
+			return false;
+		};
+
 		const msUntilNextDay = () => {
 			// Compute how many milliseconds are remaining until the next day starts
 			const today = new Date();
@@ -150,6 +164,7 @@ export default defineComponent({
 			Mousetrap.bind("alt+u", toggleUserList);
 			Mousetrap.bind("alt+s", toggleSidebar);
 			Mousetrap.bind("alt+m", toggleMentions);
+			Mousetrap.bind("mod+k", togglePalette);
 
 			debouncedResize.value = throttle(() => {
 				eventbus.emit("resize");
@@ -172,6 +187,7 @@ export default defineComponent({
 			Mousetrap.unbind("alt+u");
 			Mousetrap.unbind("alt+s");
 			Mousetrap.unbind("alt+m");
+			Mousetrap.unbind("mod+k");
 
 			if (debouncedResize.value) {
 				window.removeEventListener("resize", debouncedResize.value);
@@ -188,6 +204,7 @@ export default defineComponent({
 			toggleSidebar,
 			toggleUserList,
 			toggleMentions,
+			paletteOpen,
 			store,
 			overlay,
 			loungeWindow,
