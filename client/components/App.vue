@@ -8,6 +8,7 @@
 			@click="store.commit('sidebarOpen', false)"
 		/>
 		<router-view ref="loungeWindow"></router-view>
+		<StaleBuildBanner />
 		<Mentions />
 		<ImageViewer ref="imageViewer" />
 		<ContextMenu ref="contextMenu" />
@@ -29,6 +30,8 @@ import ImageViewer from "./ImageViewer.vue";
 import ContextMenu from "./ContextMenu.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import Mentions from "./Mentions.vue";
+import StaleBuildBanner from "./StaleBuildBanner.vue";
+import {startStalenessChecks} from "../js/buildStaleness";
 import {
 	computed,
 	provide,
@@ -54,6 +57,7 @@ export default defineComponent({
 		ContextMenu,
 		ConfirmDialog,
 		Mentions,
+		StaleBuildBanner,
 	},
 	setup() {
 		const store = useStore();
@@ -141,6 +145,7 @@ export default defineComponent({
 		prepareOpenStates();
 
 		onMounted(() => {
+			startStalenessChecks();
 			Mousetrap.bind("esc", escapeKey);
 			Mousetrap.bind("alt+u", toggleUserList);
 			Mousetrap.bind("alt+s", toggleSidebar);

@@ -1,6 +1,7 @@
 import _ from "lodash";
 import ws from "ws";
 import express, {NextFunction, Request, Response} from "express";
+import compression from "compression";
 import fs from "fs";
 import path from "path";
 import {Server as ioServer, Socket as ioSocket} from "socket.io";
@@ -91,8 +92,10 @@ export default async function (
 		.disable("x-powered-by")
 		.use(allRequests)
 		.use(addSecurityHeaders)
+		.use(compression({threshold: 1024}))
 		.get("/", indexRequest)
 		.get("/service-worker.js", forceNoCacheRequest)
+		.get("/version-hash", forceNoCacheRequest, versionHashRequest)
 		.use(express.static(Utils.getFileFromRelativeToRoot("public"), staticOptions))
 		.use("/storage/", express.static(Config.getStoragePath(), staticOptions));
 
@@ -224,6 +227,9 @@ export default async function (
 			// TODO: type as Server.Transport[]
 			transports: Config.values.transports as any,
 			pingTimeout: 60000,
+			perMessageDeflate: {
+				threshold: 1024, // skip compressing tiny/frequent payloads
+			},
 		});
 
 		sockets.on("connect", (socket) => {
@@ -399,6 +405,14 @@ function forceNoCacheRequest(_req: Request, res: Response, next: NextFunction) {
 	// browsers must fetch the latest version of these files (service worker, source maps)
 	res.setHeader("Cache-Control", "no-cache, no-transform");
 	return next();
+}
+
+function versionHashRequest(_req: Request, res: Response) {
+	// Polled periodically by an already-open client tab to detect that the
+	// server has been rebuilt/redeployed since it loaded - see
+	// client/js/buildStaleness.ts. Must never be cached (forceNoCacheRequest
+	// above), otherwise a stale tab could keep reading a stale answer too.
+	res.type("text/plain").send(Helper.getVersionCacheBust());
 }
 
 function getBaseHtml(): string {

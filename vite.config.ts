@@ -97,6 +97,8 @@ export default defineConfig(({mode}) => ({
 	define: {
 		__VUE_PROD_DEVTOOLS__: false,
 		__VUE_OPTIONS_API__: false,
+		// Baked into client/js/buildStaleness.ts to detect stale tabs
+		__BUILD_HASH__: JSON.stringify(getVersionCacheBust()),
 	},
 
 	plugins: [
