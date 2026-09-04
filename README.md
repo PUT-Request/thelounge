@@ -53,7 +53,8 @@ performance work on top — see [CHANGELOG.md](./CHANGELOG.md) for the full list
   and refreshed dependencies — see [CHANGELOG.md](./CHANGELOG.md).
 
 To learn more about configuration, usage and features of The Lounge itself,
-take a look at [the website](https://thelounge.chat).
+take a look at [the website](https://thelounge.chat). To switch an existing
+install over, see the [migration guide](./docs/migration.md).
 
 The Lounge is the official and community-managed fork of
 [Shout](https://github.com/erming/shout), by [Mattias Erming](https://github.com/erming).
