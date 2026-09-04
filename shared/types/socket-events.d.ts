@@ -224,6 +224,10 @@ interface ClientToServerEvents {
 	typing: EventHandler<{target: number; status: TypingStatus}>;
 }
 
+// Intentionally empty: socket.io requires these maps to exist.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface InterServerEvents {}
 
+// Intentionally empty: socket.io requires these maps to exist.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface SocketData {}

@@ -188,6 +188,9 @@ class Utils {
 
 			add.on("close", (code) => {
 				if (!success || code !== 0) {
+					// Rejects with the numeric exit code (not an Error) by design:
+					// callers branch on it (e.g. `code !== 0` in outdated checks).
+					// eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
 					return reject(code);
 				}
 

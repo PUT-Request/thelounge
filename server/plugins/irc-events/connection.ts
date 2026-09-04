@@ -167,11 +167,18 @@ export default <IrcEventHandler>function (irc, network) {
 		});
 
 		if (error) {
+			const reason =
+				error instanceof Error
+					? error.message
+					: typeof error === "string"
+					? error
+					: "unknown error";
+
 			network.getLobby().pushMessage(
 				client,
 				new Msg({
 					type: MessageType.ERROR,
-					text: `Connection closed unexpectedly: ${String(error)}`,
+					text: `Connection closed unexpectedly: ${reason}`,
 				}),
 				true
 			);

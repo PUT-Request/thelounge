@@ -2,7 +2,6 @@ import Config from "../config";
 import busboy, {BusboyHeaders} from "@fastify/busboy";
 import path from "path";
 import fs from "fs";
-import fileType from "file-type";
 import crypto from "crypto";
 import log from "../log";
 import contentDisposition from "content-disposition";
@@ -321,8 +320,11 @@ class Uploader {
 			await handle.read(buffer, 0, 5120, 0);
 			await handle.close();
 
-			// returns {ext, mime} if found, null if not.
-			const file = await fileType.fromBuffer(buffer);
+			// file-type v17+ is ESM-only with named exports, so it is
+			// imported dynamically (the server is CommonJS). Returns
+			// {ext, mime} if found, null if not.
+			const {fileTypeFromBuffer} = await import("file-type");
+			const file = await fileTypeFromBuffer(buffer);
 
 			// if a file type was detected correctly, return it
 			if (file) {

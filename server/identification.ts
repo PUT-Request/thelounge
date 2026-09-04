@@ -93,7 +93,7 @@ class Identification {
 		});
 	}
 
-	respondToIdent(socket: Socket, buffer: Buffer) {
+	respondToIdent(socket: Socket, buffer: Buffer | string) {
 		if (!socket.remoteAddress) {
 			log.warn("identd: no remote address");
 			return;

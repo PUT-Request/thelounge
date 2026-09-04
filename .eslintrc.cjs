@@ -94,6 +94,17 @@ const tsRules = defineConfig({
 		"no-shadow": "off",
 		"@typescript-eslint/no-shadow": ["error"],
 		"@typescript-eslint/no-redundant-type-constituents": "off",
+		// `cond && action()` / `cond ? a : b` are an established idiom in
+		// this codebase (169 sites, all intentional); v8 flags them by
+		// default, so allow the short-circuit and ternary forms explicitly
+		// instead of churning every call site.
+		"@typescript-eslint/no-unused-expressions": [
+			"error",
+			{
+				allowShortCircuit: true,
+				allowTernary: true,
+			},
+		],
 	},
 }).rules;
 
@@ -173,13 +184,18 @@ module.exports = defineConfig({
 			rules: {...baseRules, ...tsRules, ...tsRulesTemp, ...vueRules},
 		},
 		{
-			files: ["./tests/**/*.ts"],
+			// NB: this used to say ./tests/ (with an s) and matched nothing.
+			// Test files use chai property assertions (expect(x).to.be.true),
+			// which read as unused member expressions - the rule stays on
+			// for real source, where such an expression is a probable bug.
+			files: ["./test/**/*.ts"],
 			parser: "@typescript-eslint/parser",
 			rules: {
 				...baseRules,
 				...tsRules,
 				...tsRulesTemp,
 				...tsTestRulesTemp,
+				"@typescript-eslint/no-unused-expressions": "off",
 			},
 		},
 	],

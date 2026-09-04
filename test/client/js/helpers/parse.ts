@@ -344,7 +344,7 @@ describe("IRC formatted message parser", () => {
 		});
 	});
 
-	it("should find nicks", async () => {
+	it("should find nicks", () => {
 		const testCases = [
 			{
 				message: {
@@ -359,8 +359,8 @@ describe("IRC formatted message parser", () => {
 			},
 		];
 
-		const actual = await Promise.all(
-			testCases.map((testCase) => getParsedMessageContents(testCase.input, testCase.message))
+		const actual = testCases.map((testCase) =>
+			getParsedMessageContents(testCase.input, testCase.message)
 		);
 		const expected = testCases.map((testCase) => testCase.expected);
 

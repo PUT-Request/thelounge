@@ -144,7 +144,7 @@ function parseHtml(preview, res, client: Client) {
 function parseHtmlMedia($: any, preview, client: Client): Promise<FetchRequest> {
 	return new Promise((resolve, reject) => {
 		if (Config.values.disableMediaPreview) {
-			reject();
+			reject(new Error("media previews are disabled"));
 			return;
 		}
 
@@ -159,7 +159,7 @@ function parseHtmlMedia($: any, preview, client: Client): Promise<FetchRequest> 
 			!openGraphType.startsWith("video") &&
 			!openGraphType.startsWith("music")
 		) {
-			reject();
+			reject(new Error("og:type is not a media type"));
 			return;
 		}
 
@@ -202,7 +202,7 @@ function parseHtmlMedia($: any, preview, client: Client): Promise<FetchRequest> 
 					})
 						.then((resMedia) => {
 							if (resMedia === null || !mediaTypeRegex.test(resMedia.type)) {
-								return reject();
+								return reject(new Error("media response is not a media type"));
 							}
 
 							preview.type = type;
@@ -219,7 +219,7 @@ function parseHtmlMedia($: any, preview, client: Client): Promise<FetchRequest> 
 		});
 
 		if (!foundMedia) {
-			reject();
+			reject(new Error("no media found in page"));
 		}
 	});
 }
@@ -478,7 +478,7 @@ function fetch(uri: string, headers: Record<string, string>) {
 					resolve({data: buffer, type, size});
 				});
 		} catch (e: any) {
-			return reject(e);
+			return reject(e instanceof Error ? e : new Error(String(e)));
 		}
 	});
 

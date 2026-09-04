@@ -214,7 +214,12 @@ class Uploader {
 				}, file.type);
 			};
 
-			img.src = String(fileReader.result);
+			// readAsDataURL always produces a string result (or null on
+			// failure) - guard instead of String() so a failed read cannot
+			// turn into a "null" image source.
+			if (typeof fileReader.result === "string") {
+				img.src = fileReader.result;
+			}
 		};
 
 		fileReader.readAsDataURL(file);
