@@ -18,9 +18,10 @@
 			>
 				<div class="header">
 					<SidebarToggle />
-					<span class="title" :aria-label="'Currently open ' + channel.type">{{
-						channel.name
-					}}</span>
+					<span class="title" role="heading" aria-level="2">
+						<span class="sr-only">Currently open {{ channel.type }}:&nbsp;</span>
+						{{ channel.name }}
+					</span>
 					<div v-if="channel.editTopic === true" class="topic-container">
 						<input
 							ref="topicInput"
@@ -95,7 +96,7 @@
 							{'scroll-down-shown': !channel.scrolledToBottom},
 						]"
 						aria-label="Jump to recent messages"
-						@click="messageList?.jumpToBottom()"
+						@click="messageList?.jumpToLatest()"
 					>
 						<div class="scroll-down-arrow" />
 					</button>
@@ -105,6 +106,7 @@
 						:network="network"
 						:channel="channel"
 						:focused="focused"
+						:focused-storage-id="focusedStorageId"
 					/>
 				</div>
 			</div>
@@ -156,6 +158,7 @@ export default defineComponent({
 		network: {type: Object as PropType<ClientNetwork>, required: true},
 		channel: {type: Object as PropType<ClientChan>, required: true},
 		focused: Number,
+		focusedStorageId: Number,
 	},
 	emits: ["channel-changed"],
 	setup(props, {emit}) {

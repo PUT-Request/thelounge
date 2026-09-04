@@ -143,6 +143,11 @@ router.beforeEach((to, from) => {
 	return true;
 });
 
+// MRU of recently-active channel ids that skip the trim-to-100 below.
+// Module-level (not in the store): purely a local memory-management
+// structure, never synced or persisted.
+const warmChannelIds: number[] = [];
+
 router.afterEach((to) => {
 	if (store.state.appLoaded) {
 		if (window.innerWidth <= constants.mobileViewportPixels) {
@@ -162,26 +167,63 @@ router.afterEach((to) => {
 			channel.firstUnread = channel.messages[channel.messages.length - 1].id;
 		}
 
-		if (channel.messages?.length > 100) {
-			channel.messages.splice(0, channel.messages.length - 100);
-			channel.moreHistoryAvailable = true;
+		// Recently-left channels stay fully loaded in memory so bouncing
+		// between a handful of channels is instant; only channels that age
+		// out of this MRU are trimmed back to their last 100 messages
+		// (which re-fetch from the server on scroll-up). 0 restores the old
+		// trim-on-every-switch behavior. See Settings -> General.
+		const rawLimit = store.state.settings.warmChannels;
+		const warmLimit = typeof rawLimit === "number" ? rawLimit : 5;
+
+		const knownAt = warmChannelIds.indexOf(channel.id);
+
+		if (knownAt >= 0) {
+			warmChannelIds.splice(knownAt, 1);
+		}
+
+		warmChannelIds.unshift(channel.id);
+
+		if (warmChannelIds.length > warmLimit) {
+			const evicted = warmChannelIds.splice(warmLimit);
+
+			for (const id of evicted) {
+				const evictedChannel = store.getters.findChannel(id)?.channel;
+
+				if (evictedChannel && evictedChannel.messages?.length > 100) {
+					evictedChannel.messages.splice(0, evictedChannel.messages.length - 100);
+					evictedChannel.moreHistoryAvailable = true;
+				}
+			}
 		}
 	}
 });
 
-async function navigate(routeName: string, params: any = {}) {
+async function navigate(
+	routeName: string,
+	params: any = {},
+	query: Record<string, number | undefined> = {}
+) {
 	if (router.currentRoute.value.name) {
-		await router.push({name: routeName, params});
+		await router.push({name: routeName, params, query});
 	} else {
 		// If current route is null, replace the history entry
 		// This prevents invalid entries from lingering in history,
 		// and then the route guard preventing proper navigation
-		await router.replace({name: routeName, params}).catch(() => {});
+		await router.replace({name: routeName, params, query}).catch(() => {});
 	}
 }
 
-function switchToChannel(channel: ClientChan) {
-	void navigate("RoutedChat", {id: channel.id});
+function switchToChannel(channel: ClientChan, message?: {id?: number; storageId?: number}) {
+	void navigate(
+		"RoutedChat",
+		{id: channel.id},
+		message
+			? {
+					focused: message.id,
+					focusedStorageId: message.storageId,
+			  }
+			: {}
+	);
 }
 
 if ("serviceWorker" in navigator) {
@@ -192,7 +234,10 @@ if ("serviceWorker" in navigator) {
 			const channelTarget = store.getters.findChannel(id);
 
 			if (channelTarget) {
-				switchToChannel(channelTarget.channel);
+				switchToChannel(channelTarget.channel, {
+					id: event.data.msgId,
+					storageId: event.data.storageId,
+				});
 			}
 		}
 	});

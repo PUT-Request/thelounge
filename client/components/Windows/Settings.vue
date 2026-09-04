@@ -37,10 +37,17 @@ export default defineComponent({
 				return;
 			}
 
-			let value: boolean | string;
+			let value: boolean | string | number;
 
 			if ((event.target as HTMLInputElement).type === "checkbox") {
 				value = (event.target as HTMLInputElement).checked;
+			} else if (
+				(event.target as HTMLInputElement).type === "range" ||
+				(event.target as HTMLInputElement).type === "number"
+			) {
+				// Every existing setting is boolean or string, so the generic
+				// handler never had to coerce - range/number inputs need it.
+				value = Number((event.target as HTMLInputElement).value);
 			} else {
 				value = (event.target as HTMLInputElement).value;
 			}

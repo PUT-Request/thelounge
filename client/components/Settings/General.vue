@@ -53,6 +53,34 @@
 			</template>
 		</SettingCard>
 
+		<!-- Performance -->
+		<SettingCard title="Performance">
+			<div>
+				<label for="warmChannels" class="setting-row-text">
+					<div class="setting-row-label">
+						Recently viewed channels to keep loaded ({{
+							store.state.settings.warmChannels
+						}})
+					</div>
+					<div class="setting-row-description">
+						Switching back to a recently viewed channel is instant while it stays
+						loaded. Higher values use more memory; 0 always trims channels when
+						switching away.
+					</div>
+				</label>
+				<input
+					id="warmChannels"
+					:value="store.state.settings.warmChannels"
+					type="range"
+					name="warmChannels"
+					class="input"
+					min="0"
+					max="20"
+					step="1"
+				/>
+			</div>
+		</SettingCard>
+
 		<!-- Typing indicators -->
 		<SettingCard title="Typing indicators">
 			<div class="setting-card-intro">

@@ -88,6 +88,9 @@ const defaultConfig = {
 	statusMessages: {
 		default: "condensed",
 	},
+	warmChannels: {
+		default: 5,
+	},
 	theme: {
 		default: document.getElementById("theme")?.dataset.serverTheme,
 		apply(store: TypedStore, value: string) {
@@ -165,7 +168,7 @@ export function createState() {
 	return state;
 }
 
-function normalizeConfig(obj: any) {
+function normalizeConfig(obj: typeof defaultConfig) {
 	const newConfig: Partial<typeof defaultConfig> = {};
 
 	for (const settingName in obj) {

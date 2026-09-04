@@ -2,6 +2,7 @@ import socket from "../socket";
 import {cleanIrcMessage} from "../../../shared/irc";
 import {store} from "../store";
 import {switchToChannel} from "../router";
+import {markMsgRaw} from "../chan";
 import {ClientChan, NetChan, ClientMessage} from "../types";
 import {SharedMsg, MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
@@ -67,7 +68,10 @@ socket.on("msg", function (data) {
 		}
 	}
 
-	channel.messages.push(data.msg);
+	// New messages will be loaded when catching up from older history
+	if (!channel.newerMessagesAvailable) {
+		channel.messages.push(markMsgRaw(data.msg));
+	}
 
 	if (data.msg.self) {
 		channel.firstUnread = data.msg.id;
@@ -164,6 +168,8 @@ function notifyMessage(
 								registration.active?.postMessage({
 									type: "notification",
 									chanId: targetId,
+									msgId: msg.id,
+									storageId: msg.storageId,
 									timestamp: timestamp,
 									title: title,
 									body: body,
@@ -187,7 +193,7 @@ function notifyMessage(
 							const channelTarget = store.getters.findChannel(targetId);
 
 							if (channelTarget) {
-								switchToChannel(channelTarget.channel);
+								switchToChannel(channelTarget.channel, msg);
 							}
 						});
 					}

@@ -4,6 +4,7 @@ import "./commands";
 import "./init";
 import "./join";
 import "./more";
+import "./history";
 import "./msg";
 import "./msg_preview";
 import "./msg_special";

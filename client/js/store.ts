@@ -78,6 +78,8 @@ export type State = {
 	serverHasSettings: boolean;
 	messageSearchResults: {
 		results: ClientMessage[];
+		query: SearchQuery;
+		scrollTop: number;
 	} | null;
 	messageSearchPendingQuery: SearchQuery | null;
 	searchEnabled: boolean;
@@ -230,6 +232,7 @@ type Mutations = {
 	messageSearchPendingQuery(state: State, value: State["messageSearchPendingQuery"]): void;
 	messageSearchResults(state: State, value: State["messageSearchResults"]): void;
 	addMessageSearchResults(state: State, value: NonNullable<State["messageSearchResults"]>): void;
+	messageSearchScrollTop(state: State, value: number): void;
 };
 
 const mutations: Mutations = {
@@ -314,18 +317,29 @@ const mutations: Mutations = {
 	addMessageSearchResults(state, value) {
 		// Append the search results and add networks and channels to new messages
 		if (!state.messageSearchResults) {
-			state.messageSearchResults = {results: []};
+			state.messageSearchResults = {results: [], query: value.query, scrollTop: 0};
 		}
 
 		if (!value) {
 			return;
 		}
 
-		const results = [...value.results, ...state.messageSearchResults.results];
+		const previousResults = state.messageSearchResults.results;
+		const previousScrollTop = state.messageSearchResults.scrollTop;
+		const results = [...value.results, ...previousResults];
 
 		state.messageSearchResults = {
 			results,
+			query: value.query,
+			// Keep the query of the latest page and the scroll position the
+			// session had before it, so resuming lands back where it was.
+			scrollTop: previousScrollTop,
 		};
+	},
+	messageSearchScrollTop(state, value) {
+		if (state.messageSearchResults) {
+			state.messageSearchResults.scrollTop = value;
+		}
 	},
 };
 
