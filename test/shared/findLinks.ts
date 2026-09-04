@@ -17,6 +17,31 @@ describe("findLinks", () => {
 		expect(actual).to.deep.equal(expected);
 	});
 
+	it("should find custom scheme urls with http-like tails", () => {
+		const input = "sftp://files.example.com/pub/readme.txt ssh://user@example.com:2222";
+		const expected = [
+			{
+				start: 0,
+				end: 39,
+				link: "sftp://files.example.com/pub/readme.txt",
+			},
+			{
+				start: 40,
+				end: 67,
+				link: "ssh://user@example.com:2222",
+			},
+		];
+
+		const actual = findLinks(input);
+
+		expect(actual).to.deep.equal(expected);
+	});
+
+	it("should not match a bare scheme prefix", () => {
+		expect(findLinks("sftp:")).to.be.empty;
+		expect(findLinks("irc: not a link")).to.be.empty;
+	});
+
 	it("should find urls with www", () => {
 		const input = "www.nooooooooooooooo.com";
 		const expected = [
@@ -380,6 +405,11 @@ describe("findLinks", () => {
 				link: "https://example.global",
 				start: 0,
 				end: 22,
+			},
+			{
+				link: "http://example.com",
+				start: 23,
+				end: 36,
 			},
 			{
 				end: 57,

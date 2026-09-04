@@ -660,8 +660,11 @@ Vivamus bibendum vulputate tincidunt. Sed vitae ligula felis.`;
 	});
 
 	it("should not fetch links without a schema", function () {
+		// Bare host:port pairs (no schema, not even protocol-relative //)
+		// must not linkify. Protocol-relative //host:port URLs do match
+		// and are covered by the de-duplication test below.
 		const message = irc.createMessage({
-			text: `//${host}:${port} ${host}:${port} //${host}:${port}/test ${host}:${port}/test`,
+			text: `${host}:${port} ${host}:${port}/test`,
 		});
 
 		link(irc, network.channels[0], message, message.text);

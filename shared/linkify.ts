@@ -1,4 +1,4 @@
-import LinkifyIt, {Match} from "linkify-it";
+import {LinkifyIt, Match} from "linkify-it";
 import tlds from "tlds";
 
 export type LinkPart = {
@@ -7,7 +7,10 @@ export type LinkPart = {
 	link: string;
 };
 
-const linkify = LinkifyIt().tlds(tlds).tlds("onion", true);
+// v6 changed defaults: fuzzyLink and urlAuth are now off. This codebase
+// relies on the v5 behavior (bare domains linkify, user:pass@ URLs keep
+// working), so opt back into both explicitly.
+const linkify = new LinkifyIt({fuzzyLink: true, urlAuth: true}).tlds(tlds).tlds("onion", true);
 
 // Known schemes to detect in text
 const commonSchemes = [
@@ -28,11 +31,19 @@ const commonSchemes = [
 ];
 
 for (const schema of commonSchemes) {
-	linkify.add(schema + ":", "http:");
+	// v6 removed string schema aliases ("http:"). Reuse the http tail
+	// grammar instead: validate the text after our prefix as if it followed
+	// "http:". testSchemaAt returns the tail length (0 on no match), which
+	// is exactly what validate must return.
+	linkify.add(schema + ":", {
+		validate(text, pos, self) {
+			return self.testSchemaAt(`http:${text.slice(pos)}`, "http:", "http:".length);
+		},
+	});
 }
 
 linkify.add("web+", {
-	validate(text: string, pos: number, self: LinkifyIt.LinkifyIt) {
+	validate(text: string, pos: number, self: LinkifyIt) {
 		const webSchemaRe = /^[a-z]+:/gi;
 
 		if (!webSchemaRe.test(text.slice(pos))) {
@@ -49,21 +60,6 @@ linkify.add("web+", {
 	},
 	normalize(match) {
 		match.schema = match.text.slice(0, match.text.indexOf(":") + 1);
-	},
-});
-
-// we must rewrite protocol less urls to http, else if TL is hosted
-// on https, this would incorrectly use https for the remote link.
-// See https://github.com/thelounge/thelounge/issues/2525
-//
-// We take the validation logic from linkify and just add our own
-// normalizer. This is pretty gross, since it depends on the internal
-// data structure of LinkifyIt.
-linkify.add("//", {
-	validate: (linkify as any).__schemas__["//"].validate,
-	normalize(match) {
-		match.schema = ""; // this counts as not having a schema
-		match.url = "http:" + match.url;
 	},
 });
 
@@ -88,9 +84,18 @@ export function findLinksWithSchema(text: string) {
 }
 
 function makeLinkPart(url: Match): LinkPart {
+	let link = url.url;
+
+	// we must rewrite protocol less urls to http, else if TL is hosted
+	// on https, this would incorrectly use https for the remote link.
+	// See https://github.com/thelounge/thelounge/issues/2525
+	if (link.startsWith("//")) {
+		link = "http:" + link;
+	}
+
 	return {
 		start: url.index,
 		end: url.lastIndex,
-		link: url.url,
+		link,
 	};
 }
