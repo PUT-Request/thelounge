@@ -95,6 +95,28 @@ describe("Server", function () {
 				client.on("auth:success", () => resolve());
 			}));
 
+		it("should disconnect websocket on auth failure", () =>
+			new Promise<void>((resolve, reject) => {
+				// Private mode is required to reach the failure path;
+				// restored on either outcome so later tests are unaffected.
+				Config.values.public = false;
+
+				const timeout = setTimeout(() => {
+					Config.values.public = true;
+					reject(new Error("timed out waiting for disconnect"));
+				}, 5000);
+
+				client.on("auth:failed", () => {
+					client.on("disconnect", () => {
+						clearTimeout(timeout);
+						Config.values.public = true;
+						resolve();
+					});
+				});
+
+				client.emit("auth:perform", {user: "definitelynotauser", password: "wrong"});
+			}));
+
 		it("should create network", () =>
 			new Promise<void>((resolve) => {
 				client.on("init", () => {

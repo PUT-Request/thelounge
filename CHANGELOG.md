@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - Message search now uses a SQLite FTS5 trigram sidecar index (`NAME.fts.sqlite3` next to each user's `NAME.sqlite3`, rebuilt automatically and safe to delete) instead of scanning every stored message. Result sets are unchanged, but selective searches no longer scale with total history size. Budget extra disk: the sidecar runs roughly 1-3x the message database depending on text entropy (measured 1.3x on 1M synthetic rows).
 - Search understands `from:<nick>`, `datebefore:<date>`, and `dateafter:<date>` filters, and the search results view gained a jump-to-date picker that builds those filters.
 - Clicking a search result, mention, or notification jumps to it in the channel: messages carry a stable storage id (their SQLite row id, assigned at write time), the server loads a window around it, and the client scrolls to it with a highlight. While viewing history, newer messages can be paged in both directions, live messages are held back to avoid gaps, and the down-arrow button returns to the live end.
+- Websocket connections are forcibly closed server-side on auth failure so abuse-mitigation systems (e.g. fail2ban) see fresh attempts; the client stops auto-reconnecting while blocked and the sign-in form explains the wait instead of spinning.
 - Search sessions resume: going back to a search restores its results and scroll position instead of re-querying, results auto-load on scroll, and the search box refills with the last term for the channel.
 
 ### Fixed
