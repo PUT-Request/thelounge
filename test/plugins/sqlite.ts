@@ -522,6 +522,57 @@ describe("SQLite FTS sidecar", function () {
 		).to.be.empty;
 		expect(ftsCount()).to.equal(0);
 	});
+
+	it("reports storage stats", function () {
+		const net = {uuid: "stats-test-network"} as any;
+
+		store.index(net, {name: "#one"} as any, new Msg({time: 1000, text: "hello"} as any));
+		store.index(net, {name: "#one"} as any, new Msg({time: 2000, text: "world"} as any));
+		store.index(net, {name: "#two"} as any, new Msg({time: 3000, text: "hello again"} as any));
+
+		const stats = store.getStats();
+
+		expect(stats.messageCount).to.equal(3);
+		expect(stats.ftsCount).to.equal(3);
+		expect(stats.channels.map((c) => [c.channel, c.messages])).to.deep.equal([
+			["#one", 2],
+			["#two", 1],
+		]);
+	});
+
+	it("writes consistent backups", function () {
+		const net = {uuid: "backup-test-network"} as any;
+
+		store.index(
+			net,
+			{name: "#channel"} as any,
+			new Msg({time: 1000, text: "backup me"} as any)
+		);
+		store.flushBatch();
+
+		const dir = path.join(Config.getHomePath(), "logs", "backup-test-tmp");
+		const {main, sidecar} = store.backupTo(dir);
+
+		expect(fs.existsSync(main)).to.be.true;
+		expect(fs.existsSync(sidecar)).to.be.true;
+
+		// The backup is a working database with the same content
+		const restored = new MessageStorage("restored");
+		restored._enable(main);
+
+		let id = 0;
+		const messages = restored.getMessages(net, {name: "#channel"} as any, () => id++);
+		expect(messages.map((m) => m.text)).to.deep.equal(["backup me"]);
+
+		const stats = restored.getStats();
+		expect(stats.messageCount).to.equal(1);
+		expect(stats.ftsCount).to.equal(1);
+
+		restored.close();
+		fs.unlinkSync(main);
+		fs.unlinkSync(sidecar);
+		fs.rmdirSync(dir);
+	});
 });
 
 describe("SQLite Message Storage", function () {

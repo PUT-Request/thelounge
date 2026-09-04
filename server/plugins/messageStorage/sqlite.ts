@@ -2,7 +2,7 @@ import {DatabaseSync} from "node:sqlite";
 
 import log from "../../log";
 import path from "path";
-import {mkdirSync} from "fs";
+import {mkdirSync, statSync, unlinkSync} from "fs";
 import Config from "../../config";
 import Msg, {Message} from "../../models/msg";
 import Chan, {Channel} from "../../models/chan";
@@ -183,6 +183,27 @@ type MessageWindow = {
 	hasMoreAfter: boolean;
 };
 
+export type ChannelStats = {
+	network: string;
+	channel: string;
+	messages: number;
+};
+
+export type StorageStats = {
+	mainPath: string;
+	mainBytes: number;
+	sidecarPath: string;
+	sidecarBytes: number;
+	messageCount: number;
+	ftsCount: number;
+	channels: ChannelStats[];
+};
+
+// Queries slower than this are worth knowing about: with multi-million-row
+// histories even an indexed query can surprise (e.g. a match-everything
+// term that must sort before LIMIT applies).
+const SLOW_QUERY_MS = 1000;
+
 type SidecarSyncCounts = {
 	mainCount: number;
 	ftsCount: number;
@@ -225,6 +246,8 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 	isEnabled: boolean;
 	database!: DatabaseSync;
 	userName: string;
+	mainPath: string | null = null;
+	sidecarPath: string | null = null;
 
 	// Message batching for improved write performance
 	private batchQueue: BatchedMessage[] = [];
@@ -251,11 +274,13 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 
 	_enable(connection_string: string) {
 		this.database = new DatabaseSync(connection_string);
+		this.mainPath = connection_string;
 
 		try {
 			this.run_pragmas();
 
 			const sidecarPath = this.sidecarPathFor(connection_string);
+			this.sidecarPath = sidecarPath;
 			this.database.prepare("ATTACH DATABASE ? AS fts").run(sidecarPath);
 			this.database.exec("PRAGMA fts.journal_mode = DELETE;");
 
@@ -577,6 +602,101 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		this.database.exec("VACUUM");
 	}
 
+	// Run a query and warn when it is slow enough to matter. The label
+	// identifies the call site; the statement itself is not logged since it
+	// may contain user search terms.
+	private timedAll(label: string, sql: string, ...params: (string | number)[]) {
+		const start = process.hrtime.bigint();
+		const rows = this.database.prepare(sql).all(...params);
+		this.warnIfSlow(label, start);
+
+		return rows;
+	}
+
+	private timedGet(label: string, sql: string, ...params: (string | number)[]) {
+		const start = process.hrtime.bigint();
+		const row = this.database.prepare(sql).get(...params);
+		this.warnIfSlow(label, start);
+
+		return row;
+	}
+
+	private warnIfSlow(label: string, start: bigint) {
+		const ms = Number(process.hrtime.bigint() - start) / 1e6;
+
+		if (ms >= SLOW_QUERY_MS) {
+			log.warn(`Slow sqlite query for ${this.userName}: ${label} took ${Math.round(ms)}ms`);
+		}
+	}
+
+	getStats(): StorageStats {
+		this.flushBatch();
+
+		const mainPath = this.mainPath ?? "(unknown)";
+		const sidecarPath = this.sidecarPath ?? "(unknown)";
+
+		const sizeOf = (p: string | null) => {
+			try {
+				return p === null || p === ":memory:" ? 0 : statSync(p).size;
+			} catch {
+				return 0;
+			}
+		};
+
+		const messageCount = (
+			this.database.prepare("SELECT COUNT(*) as c FROM messages").get() as {c: number}
+		).c;
+		const ftsCount = (
+			this.database.prepare("SELECT COUNT(*) as c FROM fts.messages_fts").get() as {
+				c: number;
+			}
+		).c;
+		const channels = this.database
+			.prepare(
+				"SELECT network, channel, COUNT(*) as c FROM messages GROUP BY network, channel ORDER BY c DESC"
+			)
+			.all() as {network: string; channel: string; c: number}[];
+
+		return {
+			mainPath,
+			mainBytes: sizeOf(this.mainPath),
+			sidecarPath,
+			sidecarBytes: sizeOf(this.sidecarPath),
+			messageCount,
+			ftsCount,
+			channels: channels.map((row) => ({
+				network: row.network,
+				channel: row.channel,
+				messages: row.c,
+			})),
+		};
+	}
+
+	// Write consistent snapshots of both files into dir (created if needed).
+	// VACUUM INTO copies a transactionally consistent image without blocking
+	// longer than the copy takes, and works while the server keeps running.
+	backupTo(dir: string): {main: string; sidecar: string} {
+		this.flushBatch();
+		mkdirSync(dir, {recursive: true});
+
+		const main = path.join(dir, `${this.userName}.sqlite3`);
+		const sidecar = path.join(dir, `${this.userName}.fts.sqlite3`);
+
+		// VACUUM INTO refuses to overwrite, so clear previous backups first.
+		for (const target of [main, sidecar]) {
+			try {
+				unlinkSync(target);
+			} catch {
+				// Missing file - nothing to clear.
+			}
+		}
+
+		this.database.exec(`VACUUM INTO '${main.replace(/'/g, "''")}'`);
+		this.database.exec(`VACUUM fts INTO '${sidecar.replace(/'/g, "''")}'`);
+
+		return {main, sidecar};
+	}
+
 	close() {
 		if (!this.isEnabled) {
 			return;
@@ -847,7 +967,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 			args.splice(2, 0, beforeTime);
 		}
 
-		const rows = this.database.prepare(query).all(...args) as StoredRow[];
+		const rows = this.timedAll("getMessages", query, ...args) as StoredRow[];
 
 		return rows.reverse().map((row) => parseStoredRow(row, nextID));
 	}
@@ -956,7 +1076,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		params.push(maxResults);
 		params.push(query.offset);
 
-		const rows = this.database.prepare(select).all(...params) as StoredRow[];
+		const rows = this.timedAll("search", select, ...params) as StoredRow[];
 		let id = query.offset;
 
 		return {
@@ -1019,39 +1139,35 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 	}
 
 	private getRowsBefore(network: Network, channel: Channel, target: StoredRow, limit: number) {
-		return this.database
-			.prepare(
-				`SELECT id, msg, type, time, msgid FROM messages
-				 WHERE network = ? AND channel = ?
-				 AND (time < ? OR (time = ? AND id < ?))
-				 ORDER BY time DESC, id DESC LIMIT ?`
-			)
-			.all(
-				network.uuid,
-				channel.name.toLowerCase(),
-				target.time,
-				target.time,
-				target.id,
-				limit
-			) as StoredRow[];
+		return this.timedAll(
+			"getRowsBefore",
+			`SELECT id, msg, type, time, msgid FROM messages
+			 WHERE network = ? AND channel = ?
+			 AND (time < ? OR (time = ? AND id < ?))
+			 ORDER BY time DESC, id DESC LIMIT ?`,
+			network.uuid,
+			channel.name.toLowerCase(),
+			target.time,
+			target.time,
+			target.id,
+			limit
+		) as StoredRow[];
 	}
 
 	private getRowsAfter(network: Network, channel: Channel, target: StoredRow, limit: number) {
-		return this.database
-			.prepare(
-				`SELECT id, msg, type, time, msgid FROM messages
-				 WHERE network = ? AND channel = ?
-				 AND (time > ? OR (time = ? AND id > ?))
-				 ORDER BY time ASC, id ASC LIMIT ?`
-			)
-			.all(
-				network.uuid,
-				channel.name.toLowerCase(),
-				target.time,
-				target.time,
-				target.id,
-				limit
-			) as StoredRow[];
+		return this.timedAll(
+			"getRowsAfter",
+			`SELECT id, msg, type, time, msgid FROM messages
+			 WHERE network = ? AND channel = ?
+			 AND (time > ? OR (time = ? AND id > ?))
+			 ORDER BY time ASC, id ASC LIMIT ?`,
+			network.uuid,
+			channel.name.toLowerCase(),
+			target.time,
+			target.time,
+			target.id,
+			limit
+		) as StoredRow[];
 	}
 
 	deleteMessages(req: DeletionRequest): number {
@@ -1097,7 +1213,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 
 			params[params.length - 1] = Math.min(remaining, deleteIdChunkSize);
 
-			const idRows = this.database.prepare(sql).all(...params) as {id: number}[];
+			const idRows = this.timedAll("deleteMessages", sql, ...params) as {id: number}[];
 			const ids = idRows.map((row) => row.id);
 
 			if (ids.length === 0) {
