@@ -32,6 +32,11 @@ class Chan {
 	muted!: boolean;
 	type!: ChanType;
 	state!: ChanState;
+	// Whether history was ever loaded from the message provider for this
+	// session. connect() only eager-loads the last-active channel per
+	// network now; other channels load on first open(). Not persisted
+	// (rebuilt every session) and never serialized (see Network.export()).
+	historyLoaded!: boolean;
 
 	isOnline?: boolean | null;
 	userAway!: string | null;
@@ -55,6 +60,7 @@ class Chan {
 			users: new Map(),
 			muted: false,
 			userAway: null,
+			historyLoaded: false,
 		});
 
 		if (this.type === ChanType.QUERY) {
@@ -69,6 +75,13 @@ class Chan {
 	pushMessage(client: Client, msg: Msg, increasesUnread = false) {
 		const chanId = this.id;
 		msg.id = client.idMsg++;
+
+		// Store the message first so notifications can include its storage ID.
+		// (With batched writes the storageId lands at flush time, at most a
+		// second later; jumps to brand-new messages fall back to msgId.)
+		if (!Config.values.public) {
+			this.writeUserLog(client, msg);
+		}
 
 		// If this channel is open in any of the clients, do not increase unread counter
 		const isOpen = _.find(client.attachedClients, {openChannel: chanId}) !== undefined;
@@ -104,8 +117,6 @@ class Chan {
 		if (msg.showInActive) {
 			delete msg.showInActive;
 		}
-
-		this.writeUserLog(client, msg);
 
 		if (Config.values.maxHistory >= 0 && this.messages.length > Config.values.maxHistory) {
 			const deleted = this.messages.splice(
@@ -279,6 +290,7 @@ class Chan {
 
 	loadMessages(client: Client, network: Network) {
 		if (!this.isLoggable()) {
+			this.historyLoaded = true;
 			return;
 		}
 
@@ -297,15 +309,41 @@ class Chan {
 				requestZncPlayback(this, network, 0);
 			}
 
+			this.historyLoaded = true;
 			return;
 		}
 
 		try {
-			const messages = client.messageProvider.getMessages(
+			// Bound the load to rows older than what memory already holds:
+			// live messages that arrived (and were indexed) while history
+			// was still unloaded would otherwise come back duplicated with
+			// fresh ids. The inclusive boundary row is deduped by content
+			// below. (Loop, not Math.min(...times): spreading a 100k-member
+			// array into a call blows the same stack limit unshiftMany
+			// exists to avoid.)
+			let beforeTime: number | undefined;
+
+			for (const m of this.messages) {
+				const t = m.time.getTime();
+
+				if (beforeTime === undefined || t < beforeTime) {
+					beforeTime = t;
+				}
+			}
+
+			let messages = client.messageProvider.getMessages(
 				network,
 				this,
-				() => client.idMsg++
+				() => client.idMsg++,
+				beforeTime
 			);
+
+			if (beforeTime !== undefined && messages.length > 0) {
+				const known = new Set(this.messages.map((m) => historyDedupeKey(m)));
+				messages = messages.filter((m) => !known.has(historyDedupeKey(m)));
+			}
+
+			this.historyLoaded = true;
 
 			if (messages.length === 0) {
 				if (network.irc!.network.cap.isEnabled("znc.in/playback")) {
@@ -344,6 +382,15 @@ class Chan {
 	setMuteStatus(muted: boolean) {
 		this.muted = !!muted;
 	}
+}
+
+// Content key for deduplicating a late history load against live messages
+// that arrived while history was still unloaded: the same logical message
+// would otherwise appear twice under two different session ids (see
+// loadMessages). Exact-match only - a false positive merely hides one
+// duplicate-looking message until the next reconnect.
+function historyDedupeKey(msg: Msg): string {
+	return `${msg.time.getTime()}|${msg.type}|${msg.from?.nick ?? ""}|${msg.text}`;
 }
 
 function requestZncPlayback(channel: Chan, network: Network, from: number) {

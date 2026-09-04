@@ -23,6 +23,7 @@ const Helper = {
 	compareHostmask,
 	compareWithWildcard,
 	catch_to_error,
+	unshiftMany,
 
 	password: {
 		hash: passwordHash,
@@ -151,4 +152,17 @@ function catch_to_error(prefix: string, err: any): Error {
 	}
 
 	return new Error(`${prefix}: ${msg}`);
+}
+
+// Chunked prepend that keeps the target array reference (unlike concat):
+// `target.unshift(...items)` blows the call stack once `items` gets large
+// (V8 throws "Maximum call stack size exceeded" in the tens-of-thousands),
+// and a maxHistory:-1 channel can hand back ~100k messages in one load.
+function unshiftMany<T>(target: T[], items: T[]): void {
+	const chunkSize = 1000;
+
+	for (let end = items.length; end > 0; end -= chunkSize) {
+		const start = Math.max(0, end - chunkSize);
+		target.splice(0, 0, ...items.slice(start, end));
+	}
 }

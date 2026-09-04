@@ -52,4 +52,25 @@ describe("Helper", function () {
 			expect(version).to.match(/v[0-9]+\.[0-9]+\.[0-9]+/);
 		});
 	});
+
+	describe("#unshiftMany", function () {
+		it("should prepend in order without blowing the stack", function () {
+			const target = [3, 4];
+			const items = Array.from({length: 200000}, (_, i) => i);
+
+			Helper.unshiftMany(target, items);
+
+			expect(target.length).to.equal(200002);
+			expect(target[0]).to.equal(0);
+			expect(target[199999]).to.equal(199999);
+			expect(target[200000]).to.equal(3);
+		});
+
+		it("should keep the target array reference", function () {
+			const target = [3];
+			Helper.unshiftMany(target, [1, 2]);
+
+			expect(target).to.deep.equal([1, 2, 3]);
+		});
+	});
 });

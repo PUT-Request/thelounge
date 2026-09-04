@@ -209,7 +209,17 @@ class Client {
 			let delay = client.manager.clients.length * 500;
 			client.networks.forEach((network) => {
 				setTimeout(() => {
-					network.channels.forEach((channel) => channel.loadMessages(client, network));
+					// Eagerly load history only for the last-active channel:
+					// every other channel loads on first open() instead, so a
+					// reconnect with many channels doesn't stall on synchronous
+					// DB reads (or an idMsg-bumping busy loop over them) before
+					// the client can paint. Chat.vue always emits open for the
+					// landed channel, so the visible channel is covered too.
+					network.channels.forEach((channel) => {
+						if (channel.id === client.lastActiveChannel && !channel.historyLoaded) {
+							channel.loadMessages(client, network);
+						}
+					});
 
 					if (!network.userDisconnected && network.irc) {
 						network.irc.connect();
@@ -647,11 +657,147 @@ class Client {
 			messages = chan.messages.slice(startIndex, index);
 		}
 
+		if (index <= 0 && isMessageId(data.storageId)) {
+			// Anchor unknown in memory (or memory exhausted at the anchor):
+			// page backwards from the stable storage id instead of stalling.
+			// Without this, channels trimmed server-side would dead-end the
+			// moment the user scrolls past what's cached. The client dedupes
+			// any overlap by storageId (see socket-events/more.ts), so the
+			// window is returned whole - unlike time-anchored paging, no
+			// boundary row needs trimming here.
+			const batchSize = data.condensed ? 1000 : 100;
+			const result = client.getStoredMessageWindow(target, data.storageId, batchSize, 0);
+
+			if (!result) {
+				return null;
+			}
+
+			messages = result.messages;
+
+			Helper.unshiftMany(chan.messages, messages);
+
+			// Cap the in-memory scrollback buffer: unlike the live tail
+			// (bounded by maxHistory in pushMessage), backward paging would
+			// otherwise grow it without limit. Trimming only affects what
+			// stays cached - scrolling past the evicted point re-fetches.
+			const maxBuffered = 3 * batchSize;
+
+			if (chan.messages.length > maxBuffered) {
+				const evicted = chan.messages.splice(0, chan.messages.length - maxBuffered);
+				chan.dereferencePreviews(evicted);
+			}
+
+			return {
+				chan: chan.id,
+				messages: messages,
+				moreHistoryAvailable: result.hasMoreBefore,
+			};
+		}
+
 		return {
 			chan: chan.id,
 			messages: messages,
 			totalMessages: chan.messages.length,
 		};
+	}
+
+	private getStoredMessageWindow(
+		target: {network: Network; chan: Chan},
+		storageId: unknown,
+		before: number,
+		after: number
+	) {
+		if (!isMessageId(storageId) || !this.messageProvider?.isEnabled) {
+			return null;
+		}
+
+		return this.messageProvider.getMessagesAround(
+			target.network,
+			target.chan,
+			storageId,
+			before,
+			after,
+			() => this.idMsg++
+		);
+	}
+
+	historyAround(data) {
+		const target = this.find(data.target);
+
+		if (!target) {
+			return null;
+		}
+
+		const stored = this.getStoredMessageWindow(target, data.storageId, 50, 50);
+
+		if (stored) {
+			return {
+				chan: target.chan.id,
+				messages: stored.messages,
+				hasMoreBefore: stored.hasMoreBefore,
+				hasMoreAfter: stored.hasMoreAfter,
+			};
+		}
+
+		const index = isMessageId(data.msgId)
+			? target.chan.messages.findIndex((message) => message.id === data.msgId)
+			: -1;
+
+		if (index < 0) {
+			return {
+				chan: target.chan.id,
+				messages: [],
+				hasMoreBefore: false,
+				hasMoreAfter: false,
+			};
+		}
+
+		const start = Math.max(0, index - 50);
+		const end = Math.min(target.chan.messages.length, index + 51);
+
+		return {
+			chan: target.chan.id,
+			messages: target.chan.messages.slice(start, end),
+			hasMoreBefore: start > 0,
+			hasMoreAfter: end < target.chan.messages.length,
+		};
+	}
+
+	historyNewer(data) {
+		const target = this.find(data.target);
+
+		if (!target) {
+			return null;
+		}
+
+		const index = isMessageId(data.lastId)
+			? target.chan.messages.findIndex((message) => message.id === data.lastId)
+			: -1;
+
+		if (index >= 0) {
+			const end = Math.min(target.chan.messages.length, index + 101);
+
+			return {
+				chan: target.chan.id,
+				messages: target.chan.messages.slice(index + 1, end),
+				hasMoreAfter: end < target.chan.messages.length,
+			};
+		}
+
+		const stored = this.getStoredMessageWindow(target, data.storageId, 0, 100);
+
+		return stored
+			? {
+					chan: target.chan.id,
+					messages: stored.messages,
+					hasMoreAfter: stored.hasMoreAfter,
+			  }
+			: null;
+	}
+
+	historyLatest(data) {
+		const result = this.more({target: data.target, lastId: -1, condensed: false});
+		return result?.totalMessages === undefined ? null : result;
 	}
 
 	clearHistory(data) {
@@ -721,6 +867,13 @@ class Client {
 		if (targetNetChan.chan.messages.length > 0) {
 			targetNetChan.chan.firstUnread =
 				targetNetChan.chan.messages[targetNetChan.chan.messages.length - 1].id;
+		}
+
+		// Lazy per-channel history load (see connect()): the first open of
+		// a channel whose history was never loaded pulls it from storage,
+		// which re-emits it via "more" for the client to prepend.
+		if (!targetNetChan.chan.historyLoaded) {
+			targetNetChan.chan.loadMessages(this, targetNetChan.network);
 		}
 
 		attachedClient.openChannel = targetNetChan.chan.id;
@@ -911,6 +1064,10 @@ class Client {
 }
 
 export default Client;
+
+function isMessageId(value: unknown): value is number {
+	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
 
 // TODO: this should exist elsewhere?
 export type IrcEventHandler = (
