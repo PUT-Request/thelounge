@@ -949,11 +949,6 @@
   resolved "https://registry.yarnpkg.com/@types/range-parser/-/range-parser-1.2.7.tgz#50ae4353eaaddc04044279812f52c8c65857dbcb"
   integrity sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==
 
-"@types/read@0.0.32":
-  version "0.0.32"
-  resolved "https://registry.yarnpkg.com/@types/read/-/read-0.0.32.tgz#0a66e636cbb884e66f9faca986b5de8bea9af47f"
-  integrity sha512-BbcOjC8nPoAKYK500K4ckuAJgiSZKc+4SBc+Isnf7AP088RNvCTqFay69bnRG6oOYf3/Kba4DVMLFEUrgAlZtA==
-
 "@types/responselike@^1.0.0":
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/@types/responselike/-/responselike-1.0.3.tgz#cc29706f0a397cfe6df89debfe4bf5cea159db50"
@@ -3383,6 +3378,13 @@ ldapjs@2.3.3:
     vasync "^2.2.0"
     verror "^1.8.1"
 
+ldapts@9.0.0:
+  version "9.0.0"
+  resolved "https://registry.yarnpkg.com/ldapts/-/ldapts-9.0.0.tgz#45c104bc6f7e8c836c15340ab0aa83af6567cd97"
+  integrity sha512-OaaoYBSuan7g0Nm2e1wsRl+9xol41zY+pDlRRSsBq36iKCd2tG/K8WifevNRDjyEfhz4bvkxKdDvJ6xHXwj7+Q==
+  dependencies:
+    strict-event-emitter-types "2.0.0"
+
 levn@^0.4.1:
   version "0.4.1"
   resolved "https://registry.yarnpkg.com/levn/-/levn-0.4.1.tgz#ae4562c007473b932a6200d403268dd2fffc6ade"
@@ -3765,10 +3767,10 @@ multimatch@^4.0.0:
     arrify "^2.0.1"
     minimatch "^3.0.4"
 
-mute-stream@~0.0.4:
-  version "0.0.8"
-  resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
-  integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
+mute-stream@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-4.0.0.tgz#3b04c237748aa7a2c93d8b5093cb001eaca1fbeb"
+  integrity sha512-gSrprq0fJ3EiOErzjdIZrjysVVmJ4uu1QWfCDss5LypA5OXvrMje5Ym5z6V6RLyJ2eF87lasX7t6a0AnFvZblg==
 
 nanoid@3.3.18, nanoid@^3.3.16, nanoid@^3.3.18:
   version "3.3.18"
@@ -4761,12 +4763,12 @@ read-pkg@^5.2.0:
     parse-json "^5.0.0"
     type-fest "^0.6.0"
 
-read@1.0.7:
-  version "1.0.7"
-  resolved "https://registry.yarnpkg.com/read/-/read-1.0.7.tgz#b3da19bd052431a97671d44a42634adf710b40c4"
-  integrity sha512-rSOKNYUmaxy0om1BNjMN4ezNT6VKK+2xF4GBhc81mkH7L60i6dp8qPYrkndNLT3QPphoII3maL9PVC9XmhHwVQ==
+read@6.0.0:
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/read/-/read-6.0.0.tgz#755f0c3110a143060ca2ddc129ac657f97d589cf"
+  integrity sha512-Tg/LaEke7h9SDbp0xJJj53oa4s1VPPySVnxQF9nUS9DgA25M/ZCLk7RVF1kHjytC87XbkgQKmQ/79+DQgEIqLA==
   dependencies:
-    mute-stream "~0.0.4"
+    mute-stream "^4.0.0"
 
 readable-stream@^3.5.0:
   version "3.6.2"
@@ -5213,6 +5215,11 @@ stream-browserify@^3.0.0:
   dependencies:
     inherits "~2.0.4"
     readable-stream "^3.5.0"
+
+strict-event-emitter-types@2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/strict-event-emitter-types/-/strict-event-emitter-types-2.0.0.tgz#05e15549cb4da1694478a53543e4e2f4abcf277f"
+  integrity sha512-Nk/brWYpD85WlOgzw5h173aci0Teyv8YdIAEtV+N88nDB0dLlazZyJMIsN6eo1/AR61l+p6CJTG1JIyFaoNEEA==
 
 string-width@^4.2.3:
   version "4.2.3"

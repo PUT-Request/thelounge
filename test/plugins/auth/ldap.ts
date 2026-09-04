@@ -110,7 +110,7 @@ function testLdapAuth() {
 			ldapAuth.auth(manager, client as any, user, wrongPassword, function (valid) {
 				expect(valid).to.equal(false);
 				expect(error).to.equal(
-					"LDAP bind failed: InsufficientAccessRightsError: InsufficientAccessRightsError\n"
+					"LDAP bind failed: InsufficientAccessError: InsufficientAccessRightsError Code: 0x32\n"
 				);
 				errorLogStub.restore();
 				resolve();
@@ -126,7 +126,7 @@ function testLdapAuth() {
 
 			ldapAuth.auth(manager, client as any, wrongUser, correctPassword, function (valid) {
 				expect(valid).to.equal(false);
-				expect(warning).to.equal("LDAP Search did not find anything for: eve (0)\n");
+				expect(warning).to.equal("LDAP Search did not find anything for: eve\n");
 				warnLogStub.restore();
 				resolve();
 			});

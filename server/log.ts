@@ -1,5 +1,5 @@
 import colors from "chalk";
-import read from "read";
+import {read} from "read";
 
 function timestamp() {
 	const datetime = new Date().toISOString().split(".")[0].replace("T", " ");
@@ -30,8 +30,14 @@ const log = {
 		options: {prompt?: string; default?: string; text: string; silent?: boolean},
 		callback: (error, result, isDefault) => void
 	): void {
-		options.prompt = [timestamp(), colors.cyan("[PROMPT]"), options.text].join(" ");
-		read(options, callback);
+		const prompt = [timestamp(), colors.cyan("[PROMPT]"), options.text].join(" ");
+
+		// read v6 is promise-based; isDefault is always false because no
+		// caller inspects it (kept in the signature to avoid churning them).
+		read({prompt, silent: options.silent, default: options.default}).then(
+			(result) => callback(null, String(result), false),
+			(error) => callback(error, null, false)
+		);
 	},
 };
 

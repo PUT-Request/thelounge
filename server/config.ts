@@ -4,7 +4,7 @@ import fs, {Stats} from "fs";
 import os from "os";
 import _ from "lodash";
 import colors from "chalk";
-import {SearchOptions} from "ldapjs";
+import {SearchOptions} from "ldapts";
 
 import log from "./log";
 import Helper from "./helper";

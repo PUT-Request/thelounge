@@ -1,4 +1,4 @@
-import ldap, {SearchOptions} from "ldapjs";
+import {Client, SearchOptions} from "ldapts";
 import colors from "chalk";
 
 import log from "../../log";
@@ -13,34 +13,27 @@ export function escapeLdapFilter(value: string): string {
 	});
 }
 
-function ldapAuthCommon(
-	user: string,
-	bindDN: string,
-	password: string,
-	callback: (success: boolean) => void
-) {
+function createClient(): Client {
 	const config = Config.values;
 
-	const ldapclient = ldap.createClient({
+	return new Client({
 		url: config.ldap.url,
 		tlsOptions: config.ldap.tlsOptions,
 	});
+}
 
-	ldapclient.on("error", function (err: Error) {
-		log.error(`Unable to connect to LDAP server: ${err.toString()}`);
-		callback(false);
-	});
+async function ldapBind(bindDN: string, password: string): Promise<boolean> {
+	const client = createClient();
 
-	ldapclient.bind(bindDN, password, function (err) {
-		ldapclient.unbind();
-
-		if (err) {
-			log.error(`LDAP bind failed: ${err.toString()}`);
-			callback(false);
-		} else {
-			callback(true);
-		}
-	});
+	try {
+		await client.bind(bindDN, password);
+		return true;
+	} catch (err) {
+		log.error("LDAP bind failed:", String(err));
+		return false;
+	} finally {
+		await client.unbind().catch(() => undefined);
+	}
 }
 
 function simpleLdapAuth(user: string, password: string, callback: (success: boolean) => void) {
@@ -55,7 +48,7 @@ function simpleLdapAuth(user: string, password: string, callback: (success: bool
 
 	log.info(`Auth against LDAP ${config.ldap.url} with provided bindDN ${bindDN}`);
 
-	ldapAuthCommon(user, bindDN, password, callback);
+	ldapBind(bindDN, password).then(callback, () => callback(false));
 }
 
 /**
@@ -66,74 +59,54 @@ function advancedLdapAuth(user: string, password: string, callback: (success: bo
 		return callback(false);
 	}
 
+	advancedLdapFlow(user, password).then(callback, () => callback(false));
+}
+
+async function advancedLdapFlow(user: string, password: string): Promise<boolean> {
 	const config = Config.values;
 	const userDN = user.replace(/([,\\/#+<>;"= ])/g, "\\$1");
 	const userFilterValue = escapeLdapFilter(user);
 
-	const ldapclient = ldap.createClient({
-		url: config.ldap.url,
-		tlsOptions: config.ldap.tlsOptions,
-	});
+	const client = createClient();
 
-	const base = config.ldap.searchDN.base;
-	const searchOptions: SearchOptions = {
-		scope: config.ldap.searchDN.scope,
-		filter: `(&(${config.ldap.primaryKey}=${userFilterValue})${config.ldap.searchDN.filter})`,
-		attributes: ["dn"],
-	};
-
-	ldapclient.on("error", function (err: Error) {
-		log.error(`Unable to connect to LDAP server: ${err.toString()}`);
-		callback(false);
-	});
-
-	ldapclient.bind(config.ldap.searchDN.rootDN, config.ldap.searchDN.rootPassword, function (err) {
-		if (err) {
+	try {
+		try {
+			await client.bind(config.ldap.searchDN.rootDN, config.ldap.searchDN.rootPassword);
+		} catch {
 			log.error("Invalid LDAP root credentials");
-			ldapclient.unbind();
-			callback(false);
-			return;
+			return false;
 		}
 
-		ldapclient.search(base, searchOptions, function (err2, res) {
-			if (err2) {
-				log.warn(`LDAP User not found: ${userDN}`);
-				ldapclient.unbind();
-				callback(false);
-				return;
-			}
+		const base = config.ldap.searchDN.base;
+		const searchOptions: SearchOptions = {
+			scope: config.ldap.searchDN.scope,
+			filter: `(&(${config.ldap.primaryKey}=${userFilterValue})${config.ldap.searchDN.filter})`,
+			attributes: ["dn"],
+		};
 
-			let found = false;
+		let entries;
 
-			res.on("searchEntry", function (entry) {
-				found = true;
-				const bindDN = entry.objectName;
-				log.info(`Auth against LDAP ${config.ldap.url} with found bindDN ${bindDN || ""}`);
-				ldapclient.unbind();
+		try {
+			({searchEntries: entries} = await client.search(base, searchOptions));
+		} catch {
+			log.warn(`LDAP User not found: ${userDN}`);
+			return false;
+		}
 
-				// TODO: Fix type !
-				ldapAuthCommon(user, bindDN!, password, callback);
-			});
+		const entry = entries[0];
 
-			res.on("error", function (err3: Error) {
-				log.error(`LDAP error: ${err3.toString()}`);
-				callback(false);
-			});
+		if (!entry) {
+			log.warn(`LDAP Search did not find anything for: ${userDN}`);
+			return false;
+		}
 
-			res.on("end", function (result) {
-				ldapclient.unbind();
+		const bindDN = entry.dn;
+		log.info(`Auth against LDAP ${config.ldap.url} with found bindDN ${bindDN || ""}`);
 
-				if (!found) {
-					log.warn(
-						`LDAP Search did not find anything for: ${userDN} (${
-							result?.status.toString() || "unknown"
-						})`
-					);
-					callback(false);
-				}
-			});
-		});
-	});
+		return await ldapBind(bindDN, password);
+	} finally {
+		await client.unbind().catch(() => undefined);
+	}
 }
 
 const ldapAuth: AuthHandler = (manager, client, user, password, callback) => {
@@ -168,66 +141,80 @@ const ldapAuth: AuthHandler = (manager, client, user, password, callback) => {
 function advancedLdapLoadUsers(users: string[], callbackLoadUser) {
 	const config = Config.values;
 
-	const ldapclient = ldap.createClient({
-		url: config.ldap.url,
-		tlsOptions: config.ldap.tlsOptions,
-	});
+	const load = async () => {
+		const ldapclient = createClient();
+		const base = config.ldap.searchDN.base;
 
-	const base = config.ldap.searchDN.base;
-
-	ldapclient.on("error", function (err: Error) {
-		log.error(`Unable to connect to LDAP server: ${err.toString()}`);
-	});
-
-	ldapclient.bind(config.ldap.searchDN.rootDN, config.ldap.searchDN.rootPassword, function (err) {
-		if (err) {
-			log.error("Invalid LDAP root credentials");
-			return true;
-		}
-
-		const remainingUsers = new Set(users);
-
-		const searchOptions: SearchOptions = {
-			scope: config.ldap.searchDN.scope,
-			filter: `${config.ldap.searchDN.filter}`,
-			attributes: [config.ldap.primaryKey],
-			paged: true,
-		};
-
-		ldapclient.search(base, searchOptions, function (err2, res) {
-			if (err2) {
-				log.error(`LDAP search error: ${err2?.toString()}`);
-				return true;
+		try {
+			try {
+				await ldapclient.bind(
+					config.ldap.searchDN.rootDN,
+					config.ldap.searchDN.rootPassword
+				);
+			} catch {
+				log.error("Invalid LDAP root credentials");
+				return;
 			}
 
-			res.on("searchEntry", function (entry) {
-				const user = entry.attributes[0].vals[0].toString();
+			const remainingUsers = new Set(users);
 
-				if (remainingUsers.has(user)) {
+			const searchOptions: SearchOptions = {
+				scope: config.ldap.searchDN.scope,
+				filter: `${config.ldap.searchDN.filter}`,
+				attributes: [config.ldap.primaryKey],
+				paged: true,
+			};
+
+			let entries;
+
+			try {
+				({searchEntries: entries} = await ldapclient.search(base, searchOptions));
+			} catch (err) {
+				log.error(`LDAP search error: ${err?.toString()}`);
+				return;
+			}
+
+			for (const entry of entries) {
+				const user = entryAttributeToString(entry[config.ldap.primaryKey]);
+
+				if (user !== null && remainingUsers.has(user)) {
 					remainingUsers.delete(user);
 					callbackLoadUser(user);
 				}
-			});
+			}
 
-			res.on("error", function (err3) {
-				log.error(`LDAP error: ${err3.toString()}`);
+			remainingUsers.forEach((user) => {
+				log.warn(
+					`No account info in LDAP for ${colors.bold(user)} but user config file exists`
+				);
 			});
+		} finally {
+			await ldapclient.unbind().catch(() => undefined);
+		}
+	};
 
-			res.on("end", function () {
-				remainingUsers.forEach((user) => {
-					log.warn(
-						`No account info in LDAP for ${colors.bold(
-							user
-						)} but user config file exists`
-					);
-				});
-			});
-		});
-
-		ldapclient.unbind();
-	});
+	// The Auth plugin API is synchronous (boolean), while ldapts is
+	// promise-only: kick the load off in the background like the old
+	// event-driven code did, and report the LDAP path as claimed.
+	void load();
 
 	return true;
+}
+
+function entryAttributeToString(
+	value: Buffer | Buffer[] | string[] | string | undefined
+): string | null {
+	if (value === undefined) {
+		return null;
+	}
+
+	const first = Array.isArray(value) ? value[0] : value;
+
+	if (first === undefined) {
+		return null;
+	}
+
+	return typeof first === "string" ? first : first.toString();
 }
 
 function ldapLoadUsers(users: string[], callbackLoadUser) {
