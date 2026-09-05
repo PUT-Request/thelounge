@@ -2,10 +2,21 @@ import {PluginInputHandler} from "./index";
 import Msg from "../../models/msg";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
+import {openInvitesWindow} from "../irc-events/invite";
 
-const commands = ["invite", "invitelist"];
+const commands = ["invite", "invitelist", "invites"];
 
 const input: PluginInputHandler = function ({irc}, chan, cmd, args) {
+	if (cmd === "invites") {
+		const target = this.find(chan.id);
+
+		if (target) {
+			openInvitesWindow(this, target.network);
+		}
+
+		return;
+	}
+
 	if (cmd === "invitelist") {
 		irc.inviteList(chan.name);
 		return;

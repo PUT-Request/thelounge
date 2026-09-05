@@ -34,18 +34,17 @@ type BeforeFetch = {
 const pendingFetches = new Map<string, BeforeFetch>();
 
 export function isChathistoryAvailable(irc: unknown): boolean {
-	const cap = (irc as {network?: {cap?: {isEnabled?: unknown}}})?.network?.cap;
-	const isEnabled = cap?.isEnabled;
+	// NOTE: call isEnabled as a method. It reads `this.enabled`
+	// internally, so a detached reference throws.
+	const cap = (irc as {network?: {cap?: {isEnabled?: (cap: string) => boolean}}})?.network?.cap;
 
-	if (typeof isEnabled !== "function") {
+	if (!cap || typeof cap.isEnabled !== "function") {
 		return false;
 	}
 
-	const check = isEnabled as (cap: string) => boolean;
-
 	// Accept both the ratified name and the pre-ratification draft name,
 	// whichever the server advertised and acknowledged.
-	return check("chathistory") || check("draft/chathistory");
+	return cap.isEnabled("chathistory") || cap.isEnabled("draft/chathistory");
 }
 
 function fetchKey(network: Network, target: string): string {

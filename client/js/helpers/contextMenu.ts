@@ -25,8 +25,17 @@ type ContextMenuDividerItem = {
 	type: "divider";
 };
 
+type ContextMenuInfoItem = {
+	type: "info";
+	label: string;
+	class?: string;
+};
+
 export type ContextMenuItem =
-	ContextMenuItemWithAction | ContextMenuItemWithLink | ContextMenuDividerItem;
+	| ContextMenuItemWithAction
+	| ContextMenuItemWithLink
+	| ContextMenuDividerItem
+	| ContextMenuInfoItem;
 
 export function generateChannelContextMenu(
 	channel: ClientChan,
@@ -312,7 +321,9 @@ export function generateUserContextMenu(
 	store: TypedStore,
 	channel: ClientChan,
 	network: ClientNetwork,
-	user: Pick<ClientUser, "nick" | "modes"> & {senderType?: "bot"}
+	user: Pick<ClientUser, "nick" | "modes" | "account" | "ident" | "hostname"> & {
+		senderType?: "bot";
+	}
 ): ContextMenuItem[] {
 	const currentChannelUser: ClientUser | Record<string, never> = channel
 		? channel.users.find((u) => u.nick === network.nick) || {}
@@ -386,6 +397,26 @@ export function generateUserContextMenu(
 				openInNewTab(channel.torrentSite?.profileUrl + user.nick);
 			},
 		});
+	}
+
+	// User card: surface the identity we track for this nick (IRCv3
+	// account-tag, extended-join, userhost-in-names) under the header.
+	const tracked = channel?.users.find((u) => u.nick === user.nick) ?? user;
+	const infoItems: ContextMenuInfoItem[] = [];
+
+	if (tracked.account) {
+		infoItems.push({type: "info", label: `Logged in as ${tracked.account}`});
+	}
+
+	if (tracked.hostname) {
+		infoItems.push({
+			type: "info",
+			label: tracked.ident ? `${tracked.ident}@${tracked.hostname}` : tracked.hostname,
+		});
+	}
+
+	if (infoItems.length > 0) {
+		items.splice(1, 0, ...infoItems);
 	}
 
 	// Bail because we're in a query or we don't have a special mode.

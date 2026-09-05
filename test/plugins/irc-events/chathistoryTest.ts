@@ -69,6 +69,22 @@ describe("chathistory plugin", function () {
 			expect(isChathistoryAvailable({} as any)).to.be.false;
 			expect(isChathistoryAvailable({network: {}} as any)).to.be.false;
 		});
+
+		it("calls isEnabled with its receiver (the framework reads this.enabled)", function () {
+			const cap = {
+				enabled: ["chathistory"],
+				isEnabled: function (this: {enabled: string[]}, name: string) {
+					return this.enabled.indexOf(name) > -1;
+				},
+			};
+
+			expect(isChathistoryAvailable({network: {cap}})).to.be.true;
+			expect(
+				isChathistoryAvailable({
+					network: {cap: {...cap, enabled: ["other"]}},
+				})
+			).to.be.false;
+		});
 	});
 
 	describe("fetch on join", function () {

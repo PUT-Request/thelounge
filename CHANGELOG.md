@@ -15,6 +15,15 @@ All notable changes to this project will be documented in this file.
 - Storage management: `thelounge storage stats [user]` reports message counts, database sizes, and per-channel breakdowns; `thelounge storage backup <dir> [user]` writes consistent snapshots (main database plus search index) safe to take while running. Queries slower than a second are now logged with their call site.
 - Websocket connections are forcibly closed server-side on auth failure so abuse-mitigation systems (e.g. fail2ban) see fresh attempts; the client stops auto-reconnecting while blocked and the sign-in form explains the wait instead of spinning.
 - Search sessions resume: going back to a search restores its results and scroll position instead of re-querying, results auto-load on scroll, and the search box refills with the last term for the channel.
+- IRCv3 CHATHISTORY: channels auto-fill recent server-side history on join (ratified capability name with `draft/` fallback), and a "Load older messages from server" button pages further back through the same pipeline (deduped, stored to SQLite, never bumping unread or firing notifications). Also requested now: `invite-notify` and `userhost-in-names`.
+- Sender identity tracking from IRCv3 metadata: services accounts (account-tag, extended-join, account-notify) and user@host (userhost-in-names, WHO) are stored on users and messages; right-clicking a user shows the tracked account and host mask in the context menu card.
+- quote-reply (opt-in under Settings -> Appearance -> Messages): an extra button on messages that pastes a styled IRC quote into the input, working on networks without `+reply` support. Native protocol replies are unchanged.
+- Pending invitations center: direct channel invites now notify like mentions, are tracked per network, and can be reviewed, joined, or dismissed from the new Invites window (`/invites`); joining a channel clears its entry automatically.
+- Collapsible Direct Messages section in the sidebar (filter, pin sort, show more/less) with pin/unpin conversation actions persisted per query.
+- Shoutbox bridge beautification for tracker networks (21 site matchers) with BBCode rendering (quote, spoiler, note, alert, tables, lists), plus tracker profile links in channel and user context menus.
+- Multi-backend file uploads: keep local hosting (now with optional per-file retention and hourly expiry sweeps) or relay through ImageBB, catbox, Uguu, qu.ax, ptpimg, OnlyImage, XBackBone, and others, selectable per backend with API key, custom upload URL, and TTL pickers under Settings -> General -> File uploads.
+- Mass-event aggregation: netsplits and reconnect floods are buffered into a single summary message (configurable threshold, window, cooldown, and post-event NAMES refresh).
+- Seedpool-style custom user groups (SPGROUPS/SPJOIN) render as grouped user lists, and `/rainbow` (`/rgb`) colorizes text with a disableable `Ctrl/Cmd+R` hotkey.
 
 ### Fixed
 

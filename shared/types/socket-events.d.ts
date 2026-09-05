@@ -202,6 +202,8 @@ interface ClientToServerEvents {
 
 	"history:server": EventHandler<{target: number}>;
 
+	"invitations:dismiss": EventHandler<{target: number; channel: string}>;
+
 	"history:around": EventHandler<{target: number; msgId?: number; storageId?: number}>;
 
 	"history:newer": EventHandler<{target: number; lastId: number; storageId?: number}>;

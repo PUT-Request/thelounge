@@ -16,6 +16,7 @@ import Uploader from "./plugins/uploader";
 import Helper from "./helper";
 import Config from "./config";
 import {fetchBeforeHistory} from "./plugins/irc-events/chathistory";
+import {removePendingInvite, syncInvitesWindow} from "./plugins/irc-events/invite";
 import Identification from "./identification";
 import changelog from "./plugins/changelog";
 import inputs from "./plugins/inputs";
@@ -913,6 +914,19 @@ function initializeClient(
 			const {network, chan} = networkAndChan;
 
 			fetchBeforeHistory(client, network, chan);
+		});
+
+		socket.on("invitations:dismiss", ({target, channel}) => {
+			const networkAndChan = client.find(target);
+
+			if (!networkAndChan || typeof channel !== "string") {
+				return;
+			}
+
+			if (removePendingInvite(networkAndChan.network, channel)) {
+				syncInvitesWindow(client, networkAndChan.network);
+				client.save();
+			}
 		});
 	}
 

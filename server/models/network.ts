@@ -50,6 +50,14 @@ export type IgnoreListItem = Hostmask & {
 
 type IgnoreList = IgnoreListItem[];
 
+// A channel invite extended to us that we have not acted on yet.
+// Ephemeral by design: never persisted, rebuilt from live INVITEs.
+export type PendingInvite = {
+	channel: string;
+	from: string;
+	time: number;
+};
+
 type NonNullableIRCWithOptions = NonNullable<IRCClient & {options: NetworkIrcOptions}>;
 
 export type NetworkWithIrcFramework = Network & {
@@ -119,6 +127,7 @@ class Network {
 	chanCache!: Chan[];
 	ignoreList!: IgnoreList;
 	keepNick!: string | null;
+	pendingInvites!: PendingInvite[];
 
 	status!: NetworkStatus;
 
@@ -180,6 +189,7 @@ class Network {
 			chanCache: [],
 			ignoreList: [],
 			keepNick: null,
+			pendingInvites: [],
 			monitorList: [],
 			toBeMonitored: [],
 		});

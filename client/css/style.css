@@ -2484,6 +2484,15 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 	background-color: rgb(0 0 0 / 10%);
 }
 
+.context-menu-info {
+	cursor: default;
+	display: block;
+	padding: 1px 8px 1px 28px;
+	color: var(--body-color-muted);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
 .context-menu-item,
 .textcomplete-item {
 	cursor: pointer;

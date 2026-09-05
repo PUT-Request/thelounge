@@ -140,6 +140,11 @@ export default defineComponent({
 		};
 
 		const clickItem = (item: ContextMenuItem) => {
+			// Info rows are display-only user-card lines
+			if ("type" in item && item.type === "info") {
+				return;
+			}
+
 			close();
 
 			if ("action" in item && item.action) {
@@ -209,7 +214,9 @@ export default defineComponent({
 		};
 
 		const openUserContextMenu = (data: {
-			user: Pick<ClientUser, "nick" | "modes"> & {senderType?: "bot"};
+			user: Pick<ClientUser, "nick" | "modes" | "account" | "ident" | "hostname"> & {
+				senderType?: "bot";
+			};
 			event: MouseEvent;
 		}) => {
 			const {network, channel} = store.state.activeChannel;
@@ -220,7 +227,7 @@ export default defineComponent({
 				network,
 				(channel.users.find((u) => u.nick === data.user.nick) as Pick<
 					ClientUser,
-					"nick" | "modes"
+					"nick" | "modes" | "account" | "ident" | "hostname"
 				> & {senderType?: "bot"}) || {
 					nick: data.user.nick,
 					modes: [],
@@ -233,21 +240,28 @@ export default defineComponent({
 		const navigateMenu = (direction: number) => {
 			let currentIndex = activeItem.value;
 
-			currentIndex += direction;
-
-			const nextItem = items.value[currentIndex];
-
-			// If the next item we would select is a divider, skip over it
-			if (nextItem && "type" in nextItem && nextItem.type === "divider") {
+			// Skip over dividers and display-only info rows, but never loop
+			// forever if the whole menu is non-interactive
+			for (let steps = 0; steps < items.value.length; steps++) {
 				currentIndex += direction;
-			}
 
-			if (currentIndex < 0) {
-				currentIndex += items.value.length;
-			}
+				if (currentIndex < 0) {
+					currentIndex += items.value.length;
+				}
 
-			if (currentIndex > items.value.length - 1) {
-				currentIndex -= items.value.length;
+				if (currentIndex > items.value.length - 1) {
+					currentIndex -= items.value.length;
+				}
+
+				const nextItem = items.value[currentIndex];
+
+				if (
+					!nextItem ||
+					!("type" in nextItem) ||
+					(nextItem.type !== "divider" && nextItem.type !== "info")
+				) {
+					break;
+				}
 			}
 
 			activeItem.value = currentIndex;

@@ -5,6 +5,7 @@ import type {IrcEventHandler} from "../../client";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType, ChanState} from "../../../shared/types/chan";
 import {normalizeAccountName} from "../../../shared/irc";
+import {removePendingInvite, syncInvitesWindow} from "./invite";
 
 export default <IrcEventHandler>function (irc, network) {
 	const client = this;
@@ -73,6 +74,11 @@ export default <IrcEventHandler>function (irc, network) {
 				chan: chan.id,
 				state: chan.state,
 			});
+		}
+
+		// Joining a channel answers its pending invite, if any
+		if (data.nick === irc.user.nick && removePendingInvite(network, data.channel)) {
+			syncInvitesWindow(client, network);
 		}
 
 		const user = new User({
