@@ -55,6 +55,10 @@ function findLastTagIndex(stack: BbcodeNode[], tagName: string) {
 }
 
 function parseBbcode(text: string) {
+	// The module-level tagRegex carries the global flag and is therefore
+	// stateful (lastIndex). matchAll clones the pattern internally, but
+	// reset explicitly so sequential parses can never leak cursor state.
+	tagRegex.lastIndex = 0;
 	const root: BbcodeNode = {tag: "root", children: []};
 	const stack = [root];
 	let lastIndex = 0;

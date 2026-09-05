@@ -29,7 +29,20 @@ class STSPolicies {
 			return;
 		}
 
-		const storedPolicies = JSON.parse(fs.readFileSync(this.stsFile, "utf-8")) as PolicyOption[];
+		let storedPolicies: PolicyOption[];
+
+		try {
+			storedPolicies = JSON.parse(fs.readFileSync(this.stsFile, "utf-8")) as PolicyOption[];
+		} catch (e: any) {
+			log.error(`Failed to read STS policies file: ${String(e)}`);
+			return;
+		}
+
+		if (!Array.isArray(storedPolicies)) {
+			log.error("Failed to read STS policies file: expected an array");
+			return;
+		}
+
 		const now = Date.now();
 
 		storedPolicies.forEach((value) => {
@@ -43,6 +56,12 @@ class STSPolicies {
 		});
 	}
 
+	/**
+	 * Returns the cached STS policy for a host, or null when absent/expired.
+	 *
+	 * @param host Hostname to look up.
+	 * @returns The policy, or null if none applies.
+	 */
 	get(host: string) {
 		const policy = this.policies.get(host);
 
@@ -59,6 +78,13 @@ class STSPolicies {
 		return policy;
 	}
 
+	/**
+	 * Inserts or removes the STS policy for a host and schedules a save.
+	 *
+	 * @param host Hostname the policy applies to.
+	 * @param port Port the policy applies to.
+	 * @param duration Max-age in seconds (<=0 removes the policy).
+	 */
 	update(host: string, port: number, duration: number) {
 		if (duration > 0) {
 			this.policies.set(host, {
@@ -73,6 +99,12 @@ class STSPolicies {
 		this.refresh();
 	}
 
+	/**
+	 * Extends an existing policy's expiry from its original duration.
+	 *
+	 * @param host Hostname whose expiry should be refreshed.
+	 * @returns The policy, or null when absent.
+	 */
 	refreshExpiration(host: string) {
 		const policy = this.policies.get(host);
 
@@ -83,6 +115,9 @@ class STSPolicies {
 		policy.expires = Date.now() + policy.duration * 1000;
 	}
 
+	/**
+	 * Persists cached STS policies to disk (debounced via refresh).
+	 */
 	saveFile() {
 		const policiesToStore: PolicyOption[] = [];
 

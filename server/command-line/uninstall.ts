@@ -16,8 +16,14 @@ program
 		const path = require("path");
 
 		const packagesConfig = path.join(Config.getPackagesPath(), "package.json");
-		// const packages = JSON.parse(fs.readFileSync(packagesConfig, "utf-8"));
-		const packages = JSON.parse(await fs.readFile(packagesConfig, "utf-8"));
+		let packages: {dependencies?: Record<string, string>};
+
+		try {
+			packages = JSON.parse(await fs.readFile(packagesConfig, "utf-8"));
+		} catch (e: any) {
+			log.error(`Failed to read packages/package.json: ${String(e)}`);
+			process.exit(1);
+		}
 
 		if (
 			!packages.dependencies ||
