@@ -337,6 +337,7 @@ class Network {
 			"seedpool/enhanced", // THC enhanced client features (user groups)
 			"chathistory", // Ratified IRCv3: server-side message history
 			"draft/chathistory", // Pre-ratification name some servers still advertise
+			"draft/event-playback", // Replay JOIN/PART/QUIT as native events, not text
 			"invite-notify", // INVITE notifications beyond the invite target
 			"userhost-in-names", // user@host in NAMES for accurate user tracking
 		]);
