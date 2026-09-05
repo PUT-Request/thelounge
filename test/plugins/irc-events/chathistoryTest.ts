@@ -73,7 +73,7 @@ describe("chathistory plugin", function () {
 		it("calls isEnabled with its receiver (the framework reads this.enabled)", function () {
 			const cap = {
 				enabled: ["chathistory"],
-				isEnabled: function (this: {enabled: string[]}, name: string) {
+				isEnabled(this: {enabled: string[]}, name: string) {
 					return this.enabled.indexOf(name) > -1;
 				},
 			};
