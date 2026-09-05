@@ -5,14 +5,21 @@ prompt: |
   - Race conditions
   - Missing documentation on exported functions
   
-  For each issue found, create a fix on a new branch.
+  Create ONE branch named `styx/fixes-<unix-timestamp>` off the latest `master`.
+  Make all fixes on that single branch, committing as you go.
   
-  After making changes, verify each commit by running:
+  IMPORTANT RULES:
+  - Do NOT commit the `styx` binary
+  - Do NOT create multiple branches — everything goes on one branch
+  
+  After all fixes are committed, verify by running:
   - git status
   - git diff
   - git log --oneline -5
+  - git push -u origin $(git branch --show-current)
+  - git ls-remote --heads origin
   
-  In your final message, return the EXACT word-for-word output of each command you ran (git status, git diff, git log, etc.). Do not summarize or paraphrase — paste the raw terminal output.
+  In your final message, return the EXACT word-for-word output of each command you ran. Do not summarize or paraphrase — paste the raw terminal output.
 
 mode: read_write
 

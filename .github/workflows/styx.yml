@@ -19,15 +19,49 @@ jobs:
       checks: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Download Styx
         run: |
-          curl -L -o styx https://styx-44p.pages.dev/styx-linux-amd64
-          chmod +x styx
+          curl -L -o /tmp/styx https://styx-44p.pages.dev/styx-linux-amd64
+          chmod +x /tmp/styx
 
       - name: Run Styx
         env:
           STYX_API_ENDPOINT: ${{ secrets.STYX_API_ENDPOINT }}
           STYX_API_KEY: ${{ secrets.STYX_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./styx --run styx.yaml
+        run: /tmp/styx --run styx.yaml
+
+      - name: Push and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find any styx branch pushed by the model
+          BRANCH=$(git branch -r --list 'origin/styx/*' | head -1 | sed 's|origin/||' | xargs)
+          if [ -z "$BRANCH" ]; then
+            echo "No styx/* branch found, skipping push/PR"
+            exit 0
+          fi
+
+          echo "Pushing branch: $BRANCH"
+          git push -u origin "$BRANCH"
+
+          # Open PR only if one doesn't already exist
+          if ! gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q .; then
+            echo "Opening PR for $BRANCH"
+            gh pr create \
+              --base master \
+              --head "$BRANCH" \
+              --title "Styx: auto-fixes from $(date -u +%Y-%m-%d)" \
+              --body "Automated code review fixes by Styx."
+          else
+            echo "PR already exists for $BRANCH"
+          fi
