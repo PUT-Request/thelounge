@@ -4,6 +4,7 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 /styx
+.github/workflows/styx.template.yml
 
 coverage/
 /public/
