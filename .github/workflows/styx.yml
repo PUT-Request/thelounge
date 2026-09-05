@@ -44,15 +44,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find any styx branch pushed by the model
-          BRANCH=$(git branch -r --list 'origin/styx/*' | head -1 | sed 's|origin/||' | xargs)
+          # Find any styx branch on remote
+          BRANCH=$(git ls-remote --heads origin 'refs/heads/styx/*' | awk '{print $2}' | sed 's|refs/heads/||' | head -1)
           if [ -z "$BRANCH" ]; then
             echo "No styx/* branch found, skipping push/PR"
             exit 0
           fi
 
-          echo "Pushing branch: $BRANCH"
-          git push -u origin "$BRANCH"
+          echo "Found branch: $BRANCH"
+
+          # Checkout the branch locally if not already on it
+          if [ "$(git branch --show-current)" != "$BRANCH" ]; then
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+          fi
+
+          # Ensure branch is up to date with remote
+          git pull origin "$BRANCH" || true
 
           # Try to open PR, don't fail if not permitted
           if ! gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q .; then
