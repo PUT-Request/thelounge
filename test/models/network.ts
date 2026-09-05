@@ -157,6 +157,17 @@ describe("Network", function () {
 		});
 
 		it("should enforce lockNetwork", function () {
+			// This test's expected locked-network values (irc.example.com,
+			// port 6697/tls) come from test/fixtures/.thelounge/config.js,
+			// loaded via an unawaited config.setHome() call in
+			// test/fixtures/env.ts, which races against test files starting
+			// to run. Set the one value this test actually depends on
+			// explicitly instead, so it's correct regardless of that race,
+			// and restore whatever was there before so this doesn't leak
+			// into other tests.
+			const originalDefaultHost = Config.values.defaults.host;
+			Config.values.defaults.host = "irc.example.com";
+
 			Config.values.lockNetwork = true;
 
 			// Make sure we lock in private mode
@@ -184,6 +195,7 @@ describe("Network", function () {
 			expect(network2.host).to.equal("irc.example.com");
 
 			Config.values.lockNetwork = false;
+			Config.values.defaults.host = originalDefaultHost;
 		});
 
 		it("should allow a locked-network host that differs from the default only by case", function () {

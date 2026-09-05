@@ -799,6 +799,9 @@ describe("SQLite Message Storage", function () {
 
 			const new_version = store.downgrade_to(rollback.version);
 			expect(new_version).to.equal(rollback.version);
+			// The recorded version must follow the downgrade target, not
+			// stay pinned at the running build's schema version
+			expect(store.current_version()).to.equal(rollback.version);
 		}
 	});
 

@@ -343,10 +343,16 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		return storedSchemaVersion;
 	}
 
-	update_version_in_db() {
+	update_version_in_db(version: number = currentSchemaVersion) {
+		// Defaults to currentSchemaVersion for the upgrade path, which always
+		// migrates up to the running build's version. _downgrade_to passes its
+		// own target explicitly: falling back to currentSchemaVersion there
+		// would drop the schema objects but mislabel the DB as still current,
+		// so older code would refuse to start while our own upgrade path
+		// would see nothing to do and never recreate what was dropped.
 		this.database
 			.prepare("UPDATE options SET value = ? WHERE name = 'schema_version'")
-			.run(currentSchemaVersion.toString());
+			.run(version.toString());
 	}
 
 	run_pragmas() {
@@ -782,6 +788,15 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		const _rollbacks = this.fetch_rollbacks(version);
 
 		if (_rollbacks.length === 0) {
+			// Nothing left to roll back (a previous downgrade already
+			// dropped everything above the target): still record the
+			// target so the version cannot lag behind the schema.
+			// Never record upward: that would claim migrations that
+			// were never applied.
+			if (this.current_version() > version) {
+				this.update_version_in_db(version);
+			}
+
 			return false;
 		}
 
@@ -798,7 +813,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		}
 
 		this.delete_migrations_older_than(version);
-		this.update_version_in_db();
+		this.update_version_in_db(version);
 
 		return true;
 	}
