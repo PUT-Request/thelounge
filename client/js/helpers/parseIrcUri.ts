@@ -74,8 +74,10 @@ export default (stringUri: string): ParsedIrcUri | Record<string, never> | undef
 
 		// We don't split channels or append # here because the connect window takes care of that
 		data.join = channel;
-	} catch (e) {
-		// do nothing on invalid uri
+	} catch {
+		// Malformed URI (bad port, invalid URL, ...): report empty instead of
+		// leaking a half-filled default or throwing inside query-param handling.
+		return {};
 	}
 
 	return data;
