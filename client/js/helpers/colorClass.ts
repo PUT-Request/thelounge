@@ -1,9 +1,17 @@
-// Generates a string from "color-1" to "color-32" based on an input string
+/**
+ * Maps an arbitrary string to a stable nick color class (`color-1`..`color-32`).
+ *
+ * Never throws: nullish input is treated as an empty string.
+ *
+ * @param str Input string (usually a nickname).
+ * @returns Color class name, e.g. `"color-7"`.
+ */
 export default (str: string) => {
+	const input = str ?? "";
 	let hash = 0;
 
-	for (let i = 0; i < str.length; i++) {
-		hash += str.charCodeAt(i);
+	for (let i = 0; i < input.length; i++) {
+		hash += input.charCodeAt(i);
 	}
 
 	/*

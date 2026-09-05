@@ -40,20 +40,47 @@ function sortParts(a: Part, b: Part) {
 
 export type MergedParts = (TextPart | NamePart | EmojiPart | ChannelPart | LinkPart)[];
 
-// Merge the style fragments within the text parts, taking into account
-// boundaries and text sections that have not matched to links or channels.
-// For example, given a string "foobar" where "foo" and "bar" have been
-// identified as parts (channels, links, etc.) and "fo", "ob" and "ar" have 3
-// different styles, the first resulting part will contain fragments "fo" and
-// "o", and the second resulting part will contain "b" and "ar". "o" and "b"
-// fragments will contain duplicate styling attributes.
+/**
+ * Merges recognized parts (links, channels, nicks, emoji) with styling
+ * fragments into renderable text parts.
+ *
+ * Copies inputs before sorting (never mutating caller arrays), guards against
+ * non-array input, and clamps fragment slices so malformed offsets cannot
+ * throw during message rendering.
+ *
+ * Merge the style fragments within the text parts, taking into account
+ * boundaries and text sections that have not matched to links or channels.
+ * For example, given a string "foobar" where "foo" and "bar" have been
+ * identified as parts (channels, links, etc.) and "fo", "ob" and "ar" have 3
+ * different styles, the first resulting part will contain fragments "fo" and
+ * "o", and the second resulting part will contain "b" and "ar". "o" and "b"
+ * fragments will contain duplicate styling attributes.
+ *
+ * @param parts Recognized parts to merge.
+ * @param styleFragments Styling fragments covering the clean text.
+ * @param cleanText Plain text the parts and fragments refer to.
+ * @returns Parts with their intersecting style fragments attached.
+ */
 function merge(
 	parts: MergedParts,
 	styleFragments: Fragment[],
 	cleanText: string
 ): PartWithFragments[] {
-	// Remove overlapping parts
-	parts = parts.sort(sortParts).reduce<MergedParts>((prev, curr) => {
+	if (!Array.isArray(parts)) {
+		parts = [];
+	}
+
+	if (!Array.isArray(styleFragments)) {
+		styleFragments = [];
+	}
+
+	if (typeof cleanText !== "string") {
+		cleanText = "";
+	}
+
+	// Remove overlapping parts (work on a copy so the caller's array keeps
+	// its order).
+	parts = [...parts].sort(sortParts).reduce<MergedParts>((prev, curr) => {
 		const intersection = prev.some((p) => anyIntersection(p, curr));
 
 		if (intersection) {

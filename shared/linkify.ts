@@ -37,50 +37,95 @@ for (const schema of commonSchemes) {
 	// is exactly what validate must return.
 	linkify.add(schema + ":", {
 		validate(text, pos, self) {
-			return self.testSchemaAt(`http:${text.slice(pos)}`, "http:", "http:".length);
+			try {
+				return self.testSchemaAt(`http:${text.slice(pos)}`, "http:", "http:".length);
+			} catch {
+				return 0;
+			}
 		},
 	});
 }
 
 linkify.add("web+", {
 	validate(text: string, pos: number, self: LinkifyIt) {
-		const webSchemaRe = /^[a-z]+:/gi;
+		try {
+			const webSchemaRe = /^[a-z]+:/gi;
 
-		if (!webSchemaRe.test(text.slice(pos))) {
+			if (!webSchemaRe.test(text.slice(pos))) {
+				return 0;
+			}
+
+			const linkEnd = self.testSchemaAt(text, "http:", pos + webSchemaRe.lastIndex);
+
+			if (linkEnd === 0) {
+				return 0;
+			}
+
+			return webSchemaRe.lastIndex + linkEnd;
+		} catch {
 			return 0;
 		}
-
-		const linkEnd = self.testSchemaAt(text, "http:", pos + webSchemaRe.lastIndex);
-
-		if (linkEnd === 0) {
-			return 0;
-		}
-
-		return webSchemaRe.lastIndex + linkEnd;
 	},
 	normalize(match) {
-		match.schema = match.text.slice(0, match.text.indexOf(":") + 1);
+		try {
+			match.schema = match.text.slice(0, match.text.indexOf(":") + 1);
+		} catch {
+			// keep linkify's default schema on unexpected input
+		}
 	},
 });
 
+/**
+ * Finds linkified URLs inside plain text.
+ *
+ * Never throws: non-string input yields an empty list, and unexpected
+ * linkify errors degrade to `[]` so one bad message cannot break rendering.
+ *
+ * @param text Plain text to scan.
+ * @returns Link parts with start/end offsets and resolved URLs.
+ */
 export function findLinks(text: string) {
-	const matches = linkify.match(text);
-
-	if (!matches) {
+	if (typeof text !== "string" || text.length === 0) {
 		return [];
 	}
 
-	return matches.map(makeLinkPart);
+	try {
+		const matches = linkify.match(text);
+
+		if (!matches) {
+			return [];
+		}
+
+		return matches.map(makeLinkPart);
+	} catch {
+		return [];
+	}
 }
 
+/**
+ * Finds linkified URLs that carry an explicit scheme (`irc://`, `https://`, ...).
+ *
+ * Shares the error handling of {@link findLinks}: invalid input yields `[]`.
+ *
+ * @param text Plain text to scan.
+ * @returns Link parts that include a URL scheme.
+ */
 export function findLinksWithSchema(text: string) {
-	const matches = linkify.match(text);
-
-	if (!matches) {
+	if (typeof text !== "string" || text.length === 0) {
 		return [];
 	}
 
-	return matches.filter((url) => !!url.schema).map(makeLinkPart);
+	try {
+		const matches = linkify.match(text);
+
+		if (!matches) {
+			return [];
+		}
+
+		return matches.filter((url) => !!url.schema).map(makeLinkPart);
+	} catch {
+		return [];
+	}
 }
 
 function makeLinkPart(url: Match): LinkPart {
