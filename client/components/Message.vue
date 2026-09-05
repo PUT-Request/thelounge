@@ -135,6 +135,7 @@ import type {ClientChan, ClientMessage, ClientNetwork} from "../js/types";
 import {MessageType} from "../../shared/types/msg";
 import {ChanType} from "../../shared/types/chan";
 import {useStore} from "../js/store";
+import {markMsgRaw} from "../js/chan";
 import {parser as shoutboxParser} from "../js/helpers/shoutbox-bridge/parser";
 
 MessageTypes.ParsedMessage = ParsedMessage;
@@ -203,7 +204,10 @@ export default defineComponent({
 				};
 			}
 
-			return msg;
+			// Preserve the markRaw optimization: message objects are treated
+			// as immutable (except previews), so keep them out of Vue's
+			// deep-reactivity tracking like the rest of the pipeline does.
+			return markMsgRaw(msg);
 		});
 
 		const canReply = computed(() => {
