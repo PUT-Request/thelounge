@@ -5,6 +5,19 @@ export interface UploadProvider {
 	requiresToken: boolean;
 	validTtl?: UploadTTL[];
 	supportNote?: string;
+	/**
+	 * Uploads a file to the remote provider.
+	 *
+	 * Network and response errors surface as rejected promises carrying an
+	 * `Error` with a human-readable message; callers must handle rejections.
+	 * Concurrent `upload()` calls are independent (fresh `FormData`/request
+	 * per call, no shared mutable state), so there is no cross-upload race.
+	 *
+	 * @param file File to upload.
+	 * @param ttl TTL option id from `validTtl` (provider-specific).
+	 * @param token Optional API token (required by some providers).
+	 * @returns Promise resolving to the public file URL.
+	 */
 	upload: (file: File, ttl: string, token?: string) => Promise<string>;
 }
 
@@ -15,6 +28,14 @@ interface UploadTTL {
 	default?: boolean;
 }
 
+/**
+ * Third-party file-upload backends shown in Settings → General.
+ *
+ * Each entry is self-contained: `upload()` builds a fresh request per call
+ * and never touches shared module state, so parallel uploads cannot race.
+ * All providers reject (never throw synchronously) on network errors,
+ * non-OK HTTP status, or unexpected response shapes.
+ */
 export const UploadProviders: UploadProvider[] = [
 	{
 		id: "new",
