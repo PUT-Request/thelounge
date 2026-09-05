@@ -20,14 +20,21 @@ export function parser(originalMessage: SharedMsg) {
 	const edit = matcher.transform(originalMessage);
 	if (!edit || !edit.nick) return originalMessage;
 
-	const message = structuredClone(toRaw(originalMessage));
-	message.text = edit.content ?? message.text;
-	message.from = {
-		...message.from!,
-		nick: sanitizeNick(edit.nick),
-		mode: "",
-		shoutbox: true,
-		original_nick: originalSender,
+	// Shallow copy on purpose: only text/from are replaced below, everything
+	// else (previews, …) stays shared and read-only. A deep clone would need
+	// structuredClone(), which throws on the reactive proxies messages carry
+	// in the store (markMsgRaw) — and toRaw() only unwraps the top level.
+	const raw = toRaw(originalMessage);
+	const message: SharedMsg = {
+		...raw,
+		text: edit.content ?? raw.text,
+		from: {
+			...raw.from!,
+			nick: sanitizeNick(edit.nick),
+			mode: "",
+			shoutbox: true,
+			original_nick: originalSender,
+		},
 	};
 
 	return message;
