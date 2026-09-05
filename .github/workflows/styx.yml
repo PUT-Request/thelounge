@@ -54,14 +54,19 @@ jobs:
           echo "Pushing branch: $BRANCH"
           git push -u origin "$BRANCH"
 
-          # Open PR only if one doesn't already exist
+          # Try to open PR, don't fail if not permitted
           if ! gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q .; then
             echo "Opening PR for $BRANCH"
-            gh pr create \
+            if gh pr create \
               --base master \
               --head "$BRANCH" \
               --title "Styx: auto-fixes from $(date -u +%Y-%m-%d)" \
-              --body "Automated code review fixes by Styx."
+              --body "Automated code review fixes by Styx."; then
+              echo "PR created successfully"
+            else
+              echo "::warning::gh pr create failed — create PR manually at:"
+              echo "::warning::https://github.com/${{ github.repository }}/pull/new/$BRANCH"
+            fi
           else
             echo "PR already exists for $BRANCH"
           fi
