@@ -39,6 +39,9 @@ const events = [
 	"info",
 	"invite",
 	"join",
+	// chathistory subscribes to joins and must run after the join handler
+	// above has created the channel object
+	"chathistory",
 	"kick",
 	"list",
 	"mode",

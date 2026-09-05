@@ -323,6 +323,10 @@ class Network {
 			"znc.in/playback", // See http://wiki.znc.in/Playback
 			"extended-monitor", // https://ircv3.net/specs/extensions/extended-monitor
 			"seedpool/enhanced", // THC enhanced client features (user groups)
+			"chathistory", // Ratified IRCv3: server-side message history
+			"draft/chathistory", // Pre-ratification name some servers still advertise
+			"invite-notify", // INVITE notifications beyond the invite target
+			"userhost-in-names", // user@host in NAMES for accurate user tracking
 		]);
 	}
 

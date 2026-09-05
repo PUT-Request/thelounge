@@ -4,6 +4,7 @@ import User from "../../models/user";
 import type {IrcEventHandler} from "../../client";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType, ChanState} from "../../../shared/types/chan";
+import {normalizeAccountName} from "../../../shared/irc";
 
 export default <IrcEventHandler>function (irc, network) {
 	const client = this;
@@ -74,7 +75,13 @@ export default <IrcEventHandler>function (irc, network) {
 			});
 		}
 
-		const user = new User({nick: data.nick});
+		const user = new User({
+			nick: data.nick,
+			ident: data.ident,
+			hostname: data.hostname,
+			// IRCv3 extended-join advertises the services account and gecos
+			account: normalizeAccountName(data.account),
+		});
 		const msg = new Msg({
 			time: data.time,
 			from: user,
@@ -89,7 +96,15 @@ export default <IrcEventHandler>function (irc, network) {
 
 		// User list update callback - executed regardless of buffering
 		const updateUserList = () => {
-			chan.setUser(new User({nick: data.nick, isBot}));
+			chan.setUser(
+				new User({
+					nick: data.nick,
+					isBot,
+					ident: data.ident,
+					hostname: data.hostname,
+					account: normalizeAccountName(data.account),
+				})
+			);
 			client.emit("users", {
 				chan: chan.id,
 			});

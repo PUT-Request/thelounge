@@ -415,7 +415,8 @@ class Chan {
 // would otherwise appear twice under two different session ids (see
 // loadMessages). Exact-match only - a false positive merely hides one
 // duplicate-looking message until the next reconnect.
-function historyDedupeKey(msg: Msg): string {
+// Also used to drop CHATHISTORY playback that we already have.
+export function historyDedupeKey(msg: Msg): string {
 	return `${msg.time.getTime()}|${msg.type}|${msg.from?.nick ?? ""}|${msg.text}`;
 }
 

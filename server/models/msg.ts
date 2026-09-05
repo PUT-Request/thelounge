@@ -46,14 +46,32 @@ class Msg {
 	massEventSummary?: MassEventSummary;
 
 	constructor(attr?: Partial<Msg>) {
-		// Some properties need to be copied in the Msg object instead of referenced
+		// Some properties need to be copied in the Msg object instead of referenced.
+		// Identity fields are only copied when set so messages without IRCv3
+		// metadata keep their exact previous shape.
 		if (attr) {
 			["from", "target"].forEach((prop) => {
-				if (attr[prop]) {
-					this[prop] = {
-						mode: attr[prop].mode,
-						nick: attr[prop].nick,
+				const source = attr[prop];
+
+				if (source) {
+					const copy: UserInMessage = {
+						mode: source.mode,
+						nick: source.nick,
 					};
+
+					if (source.account !== undefined) {
+						copy.account = source.account;
+					}
+
+					if (source.ident !== undefined) {
+						copy.ident = source.ident;
+					}
+
+					if (source.hostname !== undefined) {
+						copy.hostname = source.hostname;
+					}
+
+					this[prop] = copy;
 				}
 			});
 		}

@@ -1,8 +1,8 @@
 import Msg from "../../models/msg";
 import LinkPrefetch from "./link";
-import {cleanIrcMessage} from "../../../shared/irc";
+import {cleanIrcMessage, normalizeAccountName} from "../../../shared/irc";
 import {IrcEventHandler} from "../../client";
-import Chan from "../../models/chan";
+import Chan, {historyDedupeKey} from "../../models/chan";
 import User from "../../models/user";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
@@ -28,6 +28,14 @@ type HandleInput = {
 	/** https://ircv3.net/specs/client-tags/reply */
 	replyTo?: string;
 	multiline?: boolean;
+	/** IRCv3 account-tag value for the sender, if present */
+	account?: unknown;
+	/** Set by irc-framework when the message arrived inside a BATCH */
+	batch?: {
+		id?: string;
+		type?: string;
+		params?: unknown[];
+	};
 };
 
 function convertForHandle(type: MessageType, data: MessageEventArgs): HandleInput {
@@ -74,16 +82,40 @@ export default <IrcEventHandler>function (irc, network) {
 			data.nick = data.hostname || network.host;
 		}
 
+		// IRCv3 chathistory playback: batched messages carry the authoritative
+		// target in the batch params. They are history, not live traffic, so
+		// they never bump unread/highlight state.
+		const playbackTarget =
+			data.batch?.type === "chathistory" &&
+			Array.isArray(data.batch.params) &&
+			typeof data.batch.params[0] === "string"
+				? data.batch.params[0]
+				: undefined;
+		const isPlayback = playbackTarget !== undefined;
+
 		// Check if the sender is in our ignore list
 		const shouldIgnore = !self && network.isIgnoredUser(data);
 
-		// Server messages that aren't targeted at a channel go to the server window
-		if (
+		if (isPlayback) {
+			chan = network.getChannel(playbackTarget);
+
+			if (typeof chan === "undefined") {
+				// Joined state changed mid-fetch (parted/removed), drop it
+				return;
+			}
+
+			if (shouldIgnore) {
+				return;
+			}
+
+			from = chan.getUser(data.nick);
+		} else if (
 			data.from_server &&
 			(!data.target ||
 				!network.getChannel(data.target) ||
 				network.getChannel(data.target)?.type !== ChanType.CHANNEL)
 		) {
+			// Server messages that aren't targeted at a channel go to the server window
 			chan = network.getLobby();
 			from = chan.getUser(data.nick);
 		} else {
@@ -149,6 +181,13 @@ export default <IrcEventHandler>function (irc, network) {
 			from.isBot = true;
 		}
 
+		// IRCv3 account-tag: track the sender's services account
+		const senderAccount = normalizeAccountName(data.account);
+
+		if (senderAccount !== undefined) {
+			from.account = senderAccount;
+		}
+
 		// msg is constructed down here because `from` is being copied in the constructor
 		const msg = new Msg({
 			type: data.type,
@@ -184,12 +223,22 @@ export default <IrcEventHandler>function (irc, network) {
 			msg.showInActive = true;
 		}
 
+		// CHATHISTORY playback must not duplicate messages we already have
+		// (live traffic, ZNC or sqlite loads covering the same window)
+		if (
+			isPlayback &&
+			chan.messages.some((m) => historyDedupeKey(m) === historyDedupeKey(msg))
+		) {
+			return;
+		}
+
 		// remove IRC formatting for custom highlight testing
 		const cleanMessage = cleanIrcMessage(data.message);
 
 		// Self messages in channels are never highlighted
-		// Non-self messages are highlighted as soon as the nick is detected
-		if (!msg.highlight && !msg.self) {
+		// Non-self messages are highlighted as soon as the nick is detected.
+		// Playback is history: it never highlights.
+		if (!isPlayback && !msg.highlight && !msg.self) {
 			msg.highlight = network.highlightRegex?.test(data.message);
 
 			// If we still don't have a highlight, test against custom highlights if there's any
@@ -215,15 +264,23 @@ export default <IrcEventHandler>function (irc, network) {
 			}
 		}
 
-		// No prefetch URLs unless are simple MESSAGE or ACTION types
-		if ([MessageType.MESSAGE, MessageType.ACTION].includes(data.type)) {
+		// No prefetch URLs unless are simple MESSAGE or ACTION types.
+		// Playback is history: prefetching dozens of old links at once
+		// would hammer networks for content nobody is looking at.
+		if (!isPlayback && [MessageType.MESSAGE, MessageType.ACTION].includes(data.type)) {
 			LinkPrefetch(client, chan, msg, cleanMessage);
 		}
 
-		chan.pushMessage(client, msg, !msg.self);
+		chan.pushMessage(client, msg, !msg.self && !isPlayback);
 
-		// Do not send notifications if the channel is muted or for messages older than 15 minutes (znc buffer for example)
-		if (!chan.muted && msg.highlight && (!data.time || data.time > Date.now() - 900000)) {
+		// Do not send notifications if the channel is muted or for messages older than 15 minutes (znc buffer for example).
+		// Playback never notifies.
+		if (
+			!isPlayback &&
+			!chan.muted &&
+			msg.highlight &&
+			(!data.time || data.time > Date.now() - 900000)
+		) {
 			let title = chan.name;
 			// Notifications are single line, so preview the first line that has text
 			let body = cleanMessage.includes("\n")
@@ -266,8 +323,9 @@ export default <IrcEventHandler>function (irc, network) {
 			);
 		}
 
-		// Keep track of all mentions in channels for this client
-		if (msg.highlight && chan.type === ChanType.CHANNEL) {
+		// Keep track of all mentions in channels for this client.
+		// Playback is history: it never creates mentions.
+		if (!isPlayback && msg.highlight && chan.type === ChanType.CHANNEL) {
 			client.mentions.push({
 				chanId: chan.id,
 				msgId: msg.id,

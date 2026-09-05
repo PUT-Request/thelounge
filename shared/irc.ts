@@ -5,6 +5,12 @@ export function cleanIrcMessage(message: string) {
 	return message.replace(matchFormatting, "").trim();
 }
 
+// Normalize an IRCv3 account value: `false` (logged out), `"*"`, and `""`
+// all mean "no account". Anything else is a services account name.
+export function normalizeAccountName(account: unknown): string | undefined {
+	return typeof account === "string" && account !== "" && account !== "*" ? account : undefined;
+}
+
 export const condensedTypes = new Set([
 	"away",
 	"back",

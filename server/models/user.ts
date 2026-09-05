@@ -9,6 +9,11 @@ class User {
 	nick!: string;
 	lastMessage!: number;
 	isBot!: boolean;
+	// Services account name (IRCv3 account-tag / extended-join / account-notify)
+	account?: string;
+	// user@host parts (IRCv3 userhost-in-names, WHO, extended-join)
+	ident?: string;
+	hostname?: string;
 
 	constructor(attr: Partial<User>, prefix?: Prefix) {
 		_.defaults(this, attr, {
@@ -41,6 +46,9 @@ class User {
 			away: this.away,
 			lastMessage: this.lastMessage,
 			isBot: this.isBot,
+			account: this.account,
+			ident: this.ident,
+			hostname: this.hostname,
 		};
 	}
 }

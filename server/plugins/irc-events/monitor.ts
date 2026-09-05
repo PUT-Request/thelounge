@@ -2,6 +2,7 @@ import type {IrcEventHandler} from "../../client";
 import Msg from "../../models/msg";
 import {ChanType} from "../../../shared/types/chan";
 import {MessageType} from "../../../shared/types/msg";
+import {normalizeAccountName} from "../../../shared/irc";
 
 // https://ircv3.net/specs/extensions/monitor
 // https://ircv3.net/specs/extensions/extended-monitor
@@ -55,6 +56,22 @@ export default <IrcEventHandler>function (irc, network) {
 
 	// account-notify for a monitored nick we don't share a channel with
 	irc.on("account", function (data) {
+		const account = normalizeAccountName(data.account);
+
+		// Keep the tracked account fresh on every channel user we know.
+		// ACCOUNT events are rare (login/logout only), so per-channel
+		// user-list syncs here are cheap.
+		network.channels.forEach((chan) => {
+			const user = chan.findUser(data.nick);
+
+			if (user && user.account !== account) {
+				user.account = account;
+				client.emit("users", {
+					chan: chan.id,
+				});
+			}
+		});
+
 		if (network.serverOptions.MONITOR === null) {
 			return;
 		}
@@ -71,7 +88,7 @@ export default <IrcEventHandler>function (irc, network) {
 				time: data.time,
 				type: data.account ? MessageType.LOGIN : MessageType.LOGOUT,
 				from: channel.getUser(data.nick),
-				text: data.account || "",
+				text: typeof data.account === "string" ? data.account : "",
 			})
 		);
 	});

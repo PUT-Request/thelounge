@@ -11,6 +11,12 @@ export default <IrcEventHandler>function (irc, network) {
 			return;
 		}
 
+		// Typing states from CHATHISTORY playback describe the past,
+		// flashing them now would be wrong.
+		if (data.batch?.type === "chathistory") {
+			return;
+		}
+
 		const shouldIgnore = network.ignoreList.some(function (entry) {
 			return Helper.compareHostmask(entry, data);
 		});

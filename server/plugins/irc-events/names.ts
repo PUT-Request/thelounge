@@ -16,6 +16,16 @@ export default <IrcEventHandler>function (irc, network) {
 			const newUser = chan.getUser(user.nick);
 			newUser.setModes(user.modes, network.serverOptions.PREFIX);
 
+			// IRCv3 userhost-in-names: the framework parses full masks into
+			// ident/hostname; keep them when the server sent them.
+			if (user.ident) {
+				newUser.ident = user.ident;
+			}
+
+			if (user.hostname) {
+				newUser.hostname = user.hostname;
+			}
+
 			newUsers.set(user.nick.toLowerCase(), newUser);
 		});
 

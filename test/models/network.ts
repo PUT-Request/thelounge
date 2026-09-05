@@ -330,6 +330,23 @@ describe("Network", function () {
 			STSPolicies.update("irc.example.com", 7000, 0); // Cleanup
 			expect(STSPolicies.get("irc.example.com")).to.be.null;
 		});
+
+		it("should request IRCv3 and bouncer capabilities", function () {
+			const client = {idMsg: 1, emit() {}};
+			const network: any = new Network({host: "irc.example.com"});
+			network.createIrcFramework(client);
+			expect(network.irc).to.not.be.null;
+			expect(network.irc.request_extra_caps).to.include.members([
+				"znc.in/self-message",
+				"znc.in/playback",
+				"extended-monitor",
+				"seedpool/enhanced",
+				"chathistory",
+				"draft/chathistory",
+				"invite-notify",
+				"userhost-in-names",
+			]);
+		});
 	});
 
 	describe("#edit(client, args)", function () {
