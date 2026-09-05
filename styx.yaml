@@ -18,7 +18,7 @@ mode: read_write
 
 api_endpoint: $STYX_API_ENDPOINT
 api_key: $STYX_API_KEY
-model: big-pickle
+model: meituan/LongCat-2.0:free
 max_context: 200000
 
 max_working_time: 30m
