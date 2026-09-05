@@ -29,4 +29,5 @@ jobs:
         env:
           STYX_API_ENDPOINT: ${{ secrets.STYX_API_ENDPOINT }}
           STYX_API_KEY: ${{ secrets.STYX_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./styx --run styx.yaml
