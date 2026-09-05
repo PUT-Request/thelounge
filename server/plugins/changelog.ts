@@ -25,6 +25,13 @@ const versions: SharedChangelogData = {
 	packages: undefined,
 };
 
+/**
+ * Fetches release info from GitHub, serving a cached copy when fresh.
+ *
+ * Never throws: network or parse failures degrade to the last known data.
+ *
+ * @returns Current changelog data.
+ */
 async function fetch() {
 	const time = Date.now();
 
@@ -58,12 +65,30 @@ async function fetch() {
 	return versions;
 }
 
+/**
+ * Updates cached version info from a GitHub releases response.
+ *
+ * Never throws: malformed bodies are ignored so one bad response
+ * cannot break the update check.
+ *
+ * @param response HTTP response carrying the releases JSON array.
+ */
 function updateVersions(response: Response<string>) {
 	let i: number;
 	let release: {tag_name: string; body_html: string; prerelease: boolean; html_url: string};
 	let prerelease = false;
 
-	const body = JSON.parse(response.body);
+	let body: {tag_name: string; body_html: string; prerelease: boolean; html_url: string}[];
+
+	try {
+		body = JSON.parse(response.body);
+	} catch {
+		return;
+	}
+
+	if (!Array.isArray(body)) {
+		return;
+	}
 
 	// Find the current release among releases on GitHub
 	for (i = 0; i < body.length; i++) {
@@ -98,6 +123,13 @@ function updateVersions(response: Response<string>) {
 	}
 }
 
+/**
+ * Checks for updates once, then reschedules itself when up to date.
+ *
+ * Self-heals via .catch so the recurring timer chain never breaks.
+ *
+ * @param manager Client manager used to notify connected clients.
+ */
 function checkForUpdates(manager: ClientManager) {
 	fetch()
 		.then((versionData) => {

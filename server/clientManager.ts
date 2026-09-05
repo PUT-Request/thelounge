@@ -299,6 +299,15 @@ class ClientManager {
 		return true;
 	}
 
+	/**
+	 * Reads and parses a user's config file.
+	 *
+	 * Never throws: missing files or corrupt JSON log an error and
+	 * degrade to false so one bad user cannot break startup.
+	 *
+	 * @param name Username whose config should be read.
+	 * @returns Parsed user config, or false on failure.
+	 */
 	readUserConfig(name: string) {
 		const userPath = Config.getUserConfigPath(name);
 

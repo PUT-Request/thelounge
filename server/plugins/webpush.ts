@@ -34,6 +34,9 @@ class WebPush {
 		return this.webPushModule;
 	}
 
+	/**
+	 * Loads existing VAPID keys or generates and stores a new pair.
+	 */
 	async init() {
 		const vapidPath = path.join(Config.getHomePath(), "vapid.json");
 
@@ -60,8 +63,15 @@ class WebPush {
 				}
 			}
 
-			const data = fs.readFileSync(vapidPath, "utf-8");
-			const parsedData = JSON.parse(data);
+			let parsedData: {publicKey?: unknown; privateKey?: unknown};
+
+			try {
+				const data = fs.readFileSync(vapidPath, "utf-8");
+				parsedData = JSON.parse(data);
+			} catch (e: any) {
+				log.error(`Failed to read VAPID keys: ${String(e)}`);
+				parsedData = {};
+			}
 
 			if (
 				typeof parsedData.publicKey === "string" &&
@@ -92,6 +102,15 @@ class WebPush {
 		};
 	}
 
+	/**
+	 * Fans a push payload out to a client's sessions with subscriptions.
+	 *
+	 * Fire-and-forget: per-session failures are handled in pushSingle.
+	 *
+	 * @param client Client owning the sessions.
+	 * @param payload Payload to deliver.
+	 * @param onlyToOffline When true, skip currently attached sessions.
+	 */
 	push(client: Client, payload: any, onlyToOffline: boolean) {
 		_.forOwn(client.config.sessions, ({pushSubscription}, token) => {
 			if (pushSubscription) {
@@ -104,6 +123,16 @@ class WebPush {
 		});
 	}
 
+	/**
+	 * Delivers one push notification, dropping subscriptions the push
+	 * service reports as gone (4xx).
+	 *
+	 * Never throws: failures are logged and stale subscriptions removed.
+	 *
+	 * @param client Client owning the subscription.
+	 * @param subscription Push subscription to notify.
+	 * @param payload Payload to deliver.
+	 */
 	async pushSingle(client: Client, subscription: PushSubscription, payload: any) {
 		try {
 			const webPush = await this.loadWebPush();
