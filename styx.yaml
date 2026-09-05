@@ -6,7 +6,13 @@ prompt: |
   - Missing documentation on exported functions
   
   For each issue found, create a fix on a new branch.
-  Summarize all changes at the end.
+  
+  After making changes, verify each commit by running:
+  - git status
+  - git diff
+  - git log --oneline -5
+  
+  In your final message, return the EXACT word-for-word output of each command you ran (git status, git diff, git log, etc.). Do not summarize or paraphrase — paste the raw terminal output.
 
 mode: read_write
 
