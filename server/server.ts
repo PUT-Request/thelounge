@@ -15,6 +15,7 @@ import ClientManager from "./clientManager";
 import Uploader from "./plugins/uploader";
 import Helper from "./helper";
 import Config from "./config";
+import {fetchBeforeHistory} from "./plugins/irc-events/chathistory";
 import Identification from "./identification";
 import changelog from "./plugins/changelog";
 import inputs from "./plugins/inputs";
@@ -900,6 +901,18 @@ function initializeClient(
 			}
 
 			client.save();
+		});
+
+		socket.on("history:server", ({target}) => {
+			const networkAndChan = client.find(target);
+
+			if (!networkAndChan) {
+				return;
+			}
+
+			const {network, chan} = networkAndChan;
+
+			fetchBeforeHistory(client, network, chan);
 		});
 	}
 

@@ -1,7 +1,10 @@
 import {expect} from "vitest";
 import {EventEmitter} from "events";
 
-import chathistory, {isChathistoryAvailable} from "../../../server/plugins/irc-events/chathistory";
+import chathistory, {
+	isChathistoryAvailable,
+	fetchBeforeHistory,
+} from "../../../server/plugins/irc-events/chathistory";
 import standardReply from "../../../server/plugins/irc-events/standard-reply";
 import messageHandler from "../../../server/plugins/irc-events/message";
 import Chan from "../../../server/models/chan";
@@ -362,5 +365,193 @@ describe("chathistory playback", function () {
 		expect(channel.pushed[0].type).to.equal(MessageType.ERROR);
 		expect(channel.pushed[0].text).to.contain("Messages could not be retrieved");
 		expect(lobby.pushed).to.have.lengthOf(0);
+	});
+});
+
+describe("chathistory load-older", function () {
+	let setupCounter = 0;
+
+	beforeEach(function () {
+		Config.values.public = false;
+	});
+
+	afterEach(function () {
+		Config.values.public = true;
+	});
+
+	function setupBoth() {
+		const rawCalls: any[][] = [];
+		const emitted: any[] = [];
+		const webPushCalls: any[] = [];
+		const flushed: string[] = [];
+		const irc = new EventEmitter() as any;
+		irc.user = {nick: "me"};
+		irc.network = {cap: {isEnabled: (cap: string) => cap === "chathistory"}};
+		irc.raw = (...args: any[]) => rawCalls.push(args);
+
+		const chan = new Chan({name: "#chan", type: ChanType.CHANNEL, state: ChanState.JOINED});
+		let nextStorageId = 1000;
+		const provider = {
+			index(_n: any, _c: any, msg: any) {
+				msg.storageId = nextStorageId++;
+			},
+			flushBatch() {
+				flushed.push("flush");
+			},
+		};
+		const client = {
+			idMsg: 1,
+			attachedClients: {},
+			emit: (event: string, data: any) => emitted.push({event, data}),
+			save() {},
+			messageStorage: [provider],
+			mentions: [],
+			highlightRegex: null,
+			manager: {webPush: {push: (...args: any[]) => webPushCalls.push(args)}},
+		} as any;
+		const network = {
+			uuid: `net-older-${setupCounter++}`,
+			getChannel: (name: string) => (name.toLowerCase() === "#chan" ? chan : undefined),
+			getLobby: () => chan,
+			isIgnoredUser: () => false,
+			highlightRegex: null,
+			host: "example.com",
+			irc,
+			channels: [chan],
+		} as any;
+
+		messageHandler.call(client, irc, network);
+		chathistory.call(client, irc, network);
+		return {irc, chan, client, network, emitted, rawCalls, flushed, webPushCalls};
+	}
+
+	function beforePlayback(time: number, text: string, extra: any = {}) {
+		return {
+			nick: "alice",
+			ident: "a",
+			hostname: "h",
+			target: "#chan",
+			message: text,
+			time,
+			tags: {},
+			batch: {id: "b1", type: "chathistory", params: ["#chan"]},
+			...extra,
+		};
+	}
+
+	it("sends BEFORE anchored at the oldest held message", function () {
+		const {chan, client, network, rawCalls} = setupBoth();
+		chan.messages.push({id: 1, time: new Date(1700000000000)} as any);
+
+		const sent = fetchBeforeHistory(client, network, chan);
+
+		expect(sent).to.be.true;
+		expect(rawCalls).to.have.lengthOf(1);
+		expect(rawCalls[0][0]).to.equal("CHATHISTORY");
+		expect(rawCalls[0][1]).to.equal("BEFORE");
+		expect(rawCalls[0][2]).to.equal("#chan");
+		expect(rawCalls[0][3]).to.equal(new Date(1700000000000).toISOString());
+		expect(rawCalls[0][4]).to.equal("100");
+	});
+
+	it("refuses duplicate, unsupported or unsuitable fetches", function () {
+		const {chan, client, network, rawCalls} = setupBoth();
+
+		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		// A second fetch while one is pending is refused
+		expect(fetchBeforeHistory(client, network, chan)).to.be.false;
+
+		const parted = new Chan({name: "#p", type: ChanType.CHANNEL, state: ChanState.PARTED});
+		expect(fetchBeforeHistory(client, network, parted)).to.be.false;
+
+		const special = new Chan({name: "x", type: ChanType.SPECIAL, state: ChanState.JOINED});
+		expect(fetchBeforeHistory(client, network, special)).to.be.false;
+
+		const noCap = {...network, irc: {network: {cap: {isEnabled: () => false}}}};
+		expect(fetchBeforeHistory(client, noCap as any, chan)).to.be.false;
+
+		// Only the single accepted fetch sent anything
+		expect(rawCalls).to.have.lengthOf(1);
+	});
+
+	it("delivers a BEFORE batch as one sorted prepend", function () {
+		const {irc, chan, client, network, emitted, flushed, webPushCalls} = setupBoth();
+		chan.messages.push({id: 1, time: new Date(1700000100000), text: "live"} as any);
+
+		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		irc.emit("privmsg", beforePlayback(1700000050000, "newer old"));
+		irc.emit("privmsg", beforePlayback(1700000000000, "older old"));
+
+		// Diverted: nothing delivered or stored yet
+		expect(emitted.filter((e) => e.event === "msg")).to.have.lengthOf(0);
+		expect(chan.messages).to.have.lengthOf(1);
+
+		irc.emit("batch end chathistory", {params: ["#chan"]});
+
+		const more = emitted.filter((e) => e.event === "more");
+		expect(more).to.have.lengthOf(1);
+		expect(more[0].data.messages.map((m: any) => m.text)).to.deep.equal([
+			"older old",
+			"newer old",
+		]);
+		expect(chan.messages.map((m: any) => m.text)).to.deep.equal([
+			"older old",
+			"newer old",
+			"live",
+		]);
+		expect(chan.unread).to.equal(0);
+		expect(webPushCalls).to.have.lengthOf(0);
+		expect(flushed.length).to.be.greaterThan(0);
+		// Storage ids stamped before delivery so future pages dedupe
+		expect(more[0].data.messages[0].storageId).to.be.a("number");
+	});
+
+	it("dedupes overlapping rows on delivery", function () {
+		const {irc, chan, client, network, emitted} = setupBoth();
+		const time = 1700000000000;
+		chan.messages.push({
+			id: 1,
+			time: new Date(time),
+			text: "dup",
+			type: MessageType.MESSAGE,
+			from: {nick: "alice"},
+		} as any);
+
+		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		irc.emit("privmsg", beforePlayback(time, "dup"));
+		irc.emit("batch end chathistory", {params: ["#chan"]});
+
+		const more = emitted.filter((e) => e.event === "more");
+		expect(more).to.have.lengthOf(1);
+		expect(more[0].data.messages).to.have.lengthOf(0);
+		expect(chan.messages).to.have.lengthOf(1);
+	});
+
+	it("drops batches for vanished channels and unknown batches", function () {
+		const {irc, emitted} = setupBoth();
+
+		irc.emit("batch end chathistory", {params: ["#gone"]});
+		irc.emit("batch end chathistory", {params: []});
+
+		expect(emitted.filter((e) => e.event === "more")).to.have.lengthOf(0);
+	});
+
+	it("drops the fetch on FAIL so retries start clean", function () {
+		const {irc, chan, client, network, emitted, rawCalls} = setupBoth();
+
+		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		irc.emit("standard reply", {
+			type: "FAIL",
+			command: "CHATHISTORY",
+			code: "INVALID_TARGET",
+			context: ["#chan"],
+			description: "nope",
+		});
+		irc.emit("batch end chathistory", {params: ["#chan"]});
+
+		expect(emitted.filter((e) => e.event === "more")).to.have.lengthOf(0);
+		// Retry allowed after the drop
+		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		expect(rawCalls).to.have.lengthOf(2);
 	});
 });

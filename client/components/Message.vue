@@ -109,9 +109,18 @@
 				/>
 			</span>
 		</template>
-		<div v-if="canReply && message.msgid" class="msg-actions">
-			<span class="tooltipped tooltipped-w tooltipped-no-touch" aria-label="Reply"
+		<div v-if="(canReply && message.msgid) || canQuote" class="msg-actions">
+			<span
+				v-if="canReply && message.msgid"
+				class="tooltipped tooltipped-w tooltipped-no-touch"
+				aria-label="Reply"
 				><button class="msg-action-reply" aria-label="Reply" @click.stop="startReply"
+			/></span>
+			<span
+				v-if="canQuote"
+				class="tooltipped tooltipped-w tooltipped-no-touch"
+				aria-label="Quote"
+				><button class="msg-action-quote" aria-label="Quote" @click.stop="quoteMessage"
 			/></span>
 		</div>
 	</div>
@@ -137,6 +146,7 @@ import {ChanType} from "../../shared/types/chan";
 import {useStore} from "../js/store";
 import {markMsgRaw} from "../js/chan";
 import {parser as shoutboxParser} from "../js/helpers/shoutbox-bridge/parser";
+import {formatQuoteReply} from "../js/helpers/quoteReply";
 
 MessageTypes.ParsedMessage = ParsedMessage;
 MessageTypes.LinkPreview = LinkPreview;
@@ -245,6 +255,31 @@ export default defineComponent({
 			});
 		};
 
+		const canQuote = computed(() => {
+			if (!store.state.settings.enableQuoteReply) {
+				return false;
+			}
+
+			const t = props.message.type;
+			return (
+				(t === MessageType.MESSAGE ||
+					t === MessageType.ACTION ||
+					t === MessageType.NOTICE) &&
+				Boolean(props.message.from?.nick && props.message.text)
+			);
+		});
+
+		const quoteMessage = () => {
+			const quote = formatQuoteReply(
+				props.message.from?.nick ?? "",
+				props.message.text ?? ""
+			);
+
+			if (quote) {
+				eventbus.emit("message:quote", quote);
+			}
+		};
+
 		const scrollToParent = () => {
 			if (!props.message.replyTo) {
 				return;
@@ -318,9 +353,11 @@ export default defineComponent({
 			messageComponent,
 			prettyMessage,
 			canReply,
+			canQuote,
 			parentInHistory,
 			isAction,
 			startReply,
+			quoteMessage,
 			scrollToParent,
 			onTouchStart,
 			onTouchEnd,

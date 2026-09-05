@@ -127,6 +127,7 @@ class Network {
 		PREFIX: Prefix;
 		NETWORK: string;
 		supportsReply: boolean;
+		supportsChathistory: boolean;
 		MONITOR: number | null;
 	};
 
@@ -166,6 +167,7 @@ class Network {
 				]),
 				NETWORK: "",
 				supportsReply: false,
+				supportsChathistory: false,
 				MONITOR: null,
 			},
 

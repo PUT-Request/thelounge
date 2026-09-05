@@ -20,6 +20,7 @@ export type SharedServerOptions = {
 	PREFIX: SharedPrefix;
 	NETWORK: string;
 	supportsReply: boolean;
+	supportsChathistory: boolean;
 	MONITOR: number | null;
 };
 

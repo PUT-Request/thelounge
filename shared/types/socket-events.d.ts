@@ -200,6 +200,8 @@ interface ClientToServerEvents {
 		storageId?: number;
 	}>;
 
+	"history:server": EventHandler<{target: number}>;
+
 	"history:around": EventHandler<{target: number; msgId?: number; storageId?: number}>;
 
 	"history:newer": EventHandler<{target: number; lastId: number; storageId?: number}>;

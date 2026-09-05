@@ -37,6 +37,12 @@
 				description="Display timestamps in 12-hour format instead of 24-hour"
 				:checked="store.state.settings.use12hClock"
 			/>
+			<SettingToggle
+				name="enableQuoteReply"
+				label="Quote reply button"
+				description="Show an extra button on messages that pastes a styled quote into the input (works on any network)"
+				:checked="store.state.settings.enableQuoteReply"
+			/>
 		</SettingCard>
 
 		<SettingCard v-if="store.state.serverConfiguration?.prefetch" title="Link previews">

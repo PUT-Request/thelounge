@@ -320,6 +320,26 @@ export default defineComponent({
 			input.value?.focus();
 		};
 
+		// Fired by quote-reply buttons to append a styled quote of a message
+		// to this channel's input.
+		const onQuoteMessage = (quoteText: string) => {
+			if (typeof quoteText !== "string" || !quoteText || !input.value) {
+				return;
+			}
+
+			const pending = props.channel.pendingMessage;
+			const nextMessage = pending ? `${pending} ${quoteText}` : quoteText;
+			props.channel.pendingMessage = nextMessage;
+			props.channel.inputHistoryPosition = 0;
+
+			input.value.value = nextMessage;
+			setInputSize();
+			input.value.focus();
+
+			const cursorPosition = nextMessage.length;
+			input.value.setSelectionRange(cursorPosition, cursorPosition);
+		};
+
 		const blurInput = () => {
 			input.value?.blur();
 		};
@@ -366,6 +386,7 @@ export default defineComponent({
 
 		onMounted(() => {
 			eventbus.on("escapekey", onEscape);
+			eventbus.on("message:quote", onQuoteMessage);
 			eventbus.on("reply:start", onReplyStart);
 			eventbus.on("chatinput:prefill", onPrefill);
 
@@ -479,6 +500,7 @@ export default defineComponent({
 
 		onUnmounted(() => {
 			eventbus.off("escapekey", onEscape);
+			eventbus.off("message:quote", onQuoteMessage);
 			eventbus.off("reply:start", onReplyStart);
 			eventbus.off("chatinput:prefill", onPrefill);
 

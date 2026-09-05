@@ -193,6 +193,9 @@ const defaultConfig = {
 	enableRainbowHotkey: {
 		default: true,
 	},
+	enableQuoteReply: {
+		default: false,
+	},
 };
 
 export const config = normalizeConfig(defaultConfig);

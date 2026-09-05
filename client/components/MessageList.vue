@@ -12,6 +12,16 @@
 				<span v-else>Show older messages</span>
 			</button>
 		</div>
+		<div v-show="canLoadServerHistory" class="show-more">
+			<button
+				:disabled="channel.historyLoading || !store.state.isConnected"
+				class="btn"
+				@click="onLoadServerHistoryClick"
+			>
+				<span v-if="channel.historyLoading">Loading…</span>
+				<span v-else>Load older messages from server</span>
+			</button>
+		</div>
 		<div
 			class="messages"
 			role="log"
@@ -112,6 +122,7 @@ import {
 	watch,
 } from "vue";
 import {useStore} from "../js/store";
+import {ChanType} from "../../shared/types/chan";
 import {ClientChan, ClientMessage, ClientNetwork, ClientLinkPreview} from "../js/types";
 
 // Matches the previous (unvirtualized) `#chat .messages { padding: 10px 0; }`
@@ -162,6 +173,36 @@ export default defineComponent({
 				storageId: message?.storageId,
 				condensed: store.state.settings.statusMessages !== "shown",
 			});
+		};
+
+		// Local history is exhausted but the server may hold older messages
+		// (IRCv3 CHATHISTORY). Results arrive as a prepended batch; a
+		// failure surfaces as an in-channel error message instead.
+		const canLoadServerHistory = computed(
+			() =>
+				!props.channel.moreHistoryAvailable &&
+				store.state.isConnected &&
+				(props.channel.type === ChanType.CHANNEL ||
+					props.channel.type === ChanType.QUERY) &&
+				(props.network.serverOptions.supportsChathistory ?? false)
+		);
+
+		const onLoadServerHistoryClick = () => {
+			if (!store.state.isConnected || props.channel.historyLoading) {
+				return;
+			}
+
+			props.channel.historyLoading = true;
+
+			socket.emit("history:server", {
+				target: props.channel.id,
+			});
+
+			// History responses clear the loading flag; this fallback covers
+			// failures, which arrive as messages rather than history events.
+			setTimeout(() => {
+				props.channel.historyLoading = false;
+			}, 20000);
 		};
 
 		const onShowNewerClick = () => {
@@ -676,6 +717,8 @@ export default defineComponent({
 			chat,
 			store,
 			onShowMoreClick,
+			canLoadServerHistory,
+			onLoadServerHistoryClick,
 			onShowNewerClick,
 			loadMoreButton,
 			loadNewerButton,

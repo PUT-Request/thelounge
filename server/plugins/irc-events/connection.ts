@@ -7,6 +7,7 @@ import Helper from "../../helper";
 import Config from "../../config";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType, ChanState} from "../../../shared/types/chan";
+import {isChathistoryAvailable} from "./chathistory";
 
 // https://ircv3.net/specs/extensions/monitor — RPL_ISUPPORT MONITOR token.
 // null = unsupported, 0 = supported with no limit, N>0 = supported with limit.
@@ -265,6 +266,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 		network.serverOptions.NETWORK = data.options.NETWORK;
 		network.serverOptions.supportsReply = irc.network.supportsTag("reply");
+		network.serverOptions.supportsChathistory = isChathistoryAvailable(irc);
 		network.serverOptions.MONITOR = parseMonitorLimit(data.options.MONITOR);
 		syncMonitorList();
 

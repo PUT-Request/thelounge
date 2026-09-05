@@ -1,5 +1,6 @@
 import Msg from "../../models/msg";
 import LinkPrefetch from "./link";
+import {collectPlaybackMessage} from "./chathistory";
 import {cleanIrcMessage, normalizeAccountName} from "../../../shared/irc";
 import {IrcEventHandler} from "../../client";
 import Chan, {historyDedupeKey} from "../../models/chan";
@@ -229,6 +230,12 @@ export default <IrcEventHandler>function (irc, network) {
 			isPlayback &&
 			chan.messages.some((m) => historyDedupeKey(m) === historyDedupeKey(msg))
 		) {
+			return;
+		}
+
+		// Members of a user-initiated BEFORE fetch accumulate server-side
+		// and are delivered as one prepend; anything else flows normally.
+		if (isPlayback && collectPlaybackMessage(network, chan, msg)) {
 			return;
 		}
 

@@ -1774,6 +1774,10 @@ textarea.input {
 	content: "\f3e5"; /* fa-reply */
 }
 
+#chat .msg .msg-action-quote::before {
+	content: "\f10d"; /* https://fontawesome.com/icons/quote-left?style=solid */
+}
+
 /* When a reply-context is present, anchor the toolbar to the bottom row
    (the actual message) instead of the reply preview above it. */
 #chat .msg:has(.reply-context) .msg-actions {
@@ -3130,6 +3134,15 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 
 #chat .bbcode-cite .fa-quote-left {
 	margin-right: 5px;
+}
+
+#chat .bbcode-cite .fas {
+	font-family: FontAwesome;
+	font-style: normal;
+}
+
+#chat .bbcode-cite .fa-quote-left::before {
+	content: "\f10d"; /* https://fontawesome.com/icons/quote-left?style=solid */
 }
 
 #chat .bbcode-note {
