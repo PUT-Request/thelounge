@@ -128,7 +128,7 @@ class Uploader {
 
 		for (const file of files) {
 			if (!file) {
-				return;
+				continue;
 			}
 
 			if (maxFileSize > 0 && file.size > maxFileSize) {
@@ -211,7 +211,12 @@ class Uploader {
 				ctx.drawImage(img, 0, 0);
 
 				canvas.toBlob((blob) => {
-					callback(new File([blob!], file.name));
+					if (!blob) {
+						callback(file);
+						return;
+					}
+
+					callback(new File([blob], file.name));
 				}, file.type);
 			};
 
@@ -230,7 +235,12 @@ class Uploader {
 		const uploadEndpoint = store.state.serverConfiguration?.allowFileUploadBackendSelection
 			? store.state.settings.uploadTo
 			: "new";
-		const uploadProvider = UploadProviders.find((b) => b.id === uploadEndpoint)!;
+		const uploadProvider = UploadProviders.find((b) => b.id === uploadEndpoint);
+
+		if (!uploadProvider) {
+			this.handleResponse({error: `Unknown upload provider: ${uploadEndpoint}`});
+			return;
+		}
 
 		// if not using local uploads set the token to user given api token
 		if (uploadProvider.id !== "new") {
@@ -314,7 +324,14 @@ class Uploader {
 	}
 
 	insertUploadUrl(url: string) {
-		const fullURL = new URL(url, location.toString()).toString();
+		let fullURL: string;
+
+		try {
+			fullURL = new URL(url, location.toString()).toString();
+		} catch {
+			store.commit("currentUserVisibleError", `Invalid upload URL: ${url}`);
+			return;
+		}
 		const textbox = document.getElementById("input");
 
 		if (!(textbox instanceof HTMLTextAreaElement)) {
@@ -342,6 +359,11 @@ class Uploader {
 	abort() {
 		this.fileQueue = [];
 
+		if (this.tokenKeepAlive) {
+			clearInterval(this.tokenKeepAlive);
+			this.tokenKeepAlive = null;
+		}
+
 		if (this.xhr) {
 			this.xhr.abort();
 			this.xhr = null;
@@ -351,6 +373,13 @@ class Uploader {
 
 const instance = new Uploader();
 
+/**
+ * Singleton file-upload controller (drag/drop, paste, XHR queue).
+ *
+ * All entry points are safe to call repeatedly: `triggerUpload` no-ops when
+ * disconnected and `abort` clears both the queue and the token keep-alive
+ * timer so no stale `upload:ping` can fire after cancellation.
+ */
 export default {
 	abort: () => instance.abort(),
 	initialize: () => instance.init(),

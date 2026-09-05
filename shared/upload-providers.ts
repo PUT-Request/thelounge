@@ -504,8 +504,18 @@ export const UploadProviders: UploadProvider[] = [
 		supportNote:
 			"Supported files: Images, Videos, Audio, and Text\nNOTE: You must have 'Hide Media by Default' disabled for your profile",
 		async upload(file: File, ttl: string, url_token?: string) {
-			const [encodedRequestURL, auth] = url_token!.split("_|_");
-			const requestURL = atob(encodedRequestURL);
+			if (typeof url_token !== "string" || !url_token.includes("_|_")) {
+				throw new Error("Invalid Upload Token");
+			}
+
+			const [encodedRequestURL, auth] = url_token.split("_|_");
+			let requestURL: string;
+
+			try {
+				requestURL = atob(encodedRequestURL);
+			} catch {
+				throw new Error("Invalid Upload URL");
+			}
 
 			if (!requestURL.startsWith("http")) {
 				throw new Error("Invalid Upload URL");
@@ -525,7 +535,13 @@ export const UploadProviders: UploadProvider[] = [
 				body: payload,
 			});
 
-			const json = await response.json();
+			let json: any;
+
+			try {
+				json = await response.json();
+			} catch {
+				throw new Error("Unknown Error");
+			}
 
 			if (!response.ok) {
 				throw new Error("Unknown Error");

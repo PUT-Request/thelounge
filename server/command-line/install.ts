@@ -45,7 +45,13 @@ program
 			packageName = expandTildeInLocalPath(packageName);
 			readFile = fspromises
 				.readFile(path.join(packageName.substring("file:".length), "package.json"), "utf-8")
-				.then((data) => JSON.parse(data) as typeof packageJson);
+				.then((data) => {
+					try {
+						return JSON.parse(data) as typeof packageJson;
+					} catch (e) {
+						throw new Error(`Failed to parse local package.json: ${String(e)}`);
+					}
+				});
 		} else {
 			// properly split scoped and non-scoped npm packages
 			// into their name and version
