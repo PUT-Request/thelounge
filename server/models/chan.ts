@@ -285,14 +285,20 @@ class Chan {
 			return;
 		}
 
-		const targetChannel: Chan = this;
+		let targetChannel: Chan = this;
 
 		// Is this particular message or channel loggable
 		if (!msg.isLoggable() || !this.isLoggable()) {
 			// Because notices are nasty and can be shown in active channel on the client
-			// if there is no open query, we want to always log notices in the sender's name
+			// if there is no open query, we want to always log notices in the sender's name.
+			// Use a throwaway copy carrying the sender's name so the log lands under it
+			// without renaming this channel (e.g. the network lobby) itself.
 			if (msg.type === MessageType.NOTICE && msg.showInActive) {
-				targetChannel.name = msg.from.nick || ""; // TODO: check if || works
+				targetChannel = Object.assign(
+					Object.create(Object.getPrototypeOf(this) as object) as Chan,
+					this,
+					{name: msg.from.nick || ""}
+				);
 			} else {
 				return;
 			}
