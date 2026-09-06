@@ -425,7 +425,8 @@ class Client {
 	generateToken(callback: (token: string) => void) {
 		crypto.randomBytes(64, (err, buf) => {
 			if (err) {
-				throw err;
+				log.error(`Failed to generate token: ${err.message}`);
+				return;
 			}
 
 			callback(buf.toString("hex"));
