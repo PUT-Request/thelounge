@@ -128,7 +128,7 @@ class Uploader {
 
 		for (const file of files) {
 			if (!file) {
-				return;
+				continue;
 			}
 
 			if (maxFileSize > 0 && file.size > maxFileSize) {
@@ -211,7 +211,12 @@ class Uploader {
 				ctx.drawImage(img, 0, 0);
 
 				canvas.toBlob((blob) => {
-					callback(new File([blob!], file.name));
+					if (!blob) {
+						callback(file);
+						return;
+					}
+
+					callback(new File([blob], file.name));
 				}, file.type);
 			};
 

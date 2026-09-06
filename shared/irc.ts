@@ -1,5 +1,5 @@
-const matchFormatting =
-	/\x02|\x1D|\x1F|\x16|\x0F|\x11|\x1E|\x03(?:[0-9]{1,2}(?:,[0-9]{1,2})?)?|\x04(?:[0-9a-f]{6}(?:,[0-9a-f]{6})?)?/gi;
+const matchFormattingPattern =
+	/\x02|\x1D|\x1F|\x16|\x0F|\x11|\x1E|\x03(?:[0-9]{1,2}(?:,[0-9]{1,2})?)?|\x04(?:[0-9a-f]{6}(?:,[0-9a-f]{6})?)?/i;
 
 /**
  * Strips IRC formatting control codes from a message and trims it.
@@ -16,7 +16,7 @@ export function cleanIrcMessage(message: string) {
 	}
 
 	try {
-		return message.replace(matchFormatting, "").trim();
+		return message.replace(new RegExp(matchFormattingPattern, "gi"), "").trim();
 	} catch {
 		return "";
 	}
