@@ -2,19 +2,23 @@ name: Styx Code Review
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
   workflow_dispatch:
+
+# Cancel previous run on new push
+concurrency:
+  group: styx-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   review:
+    if: "!contains(github.event.head_commit.message, 'Styx:')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
-      discussions: write
       actions: read
-      id-token: write
       statuses: write
       checks: write
     steps:
@@ -22,6 +26,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Configure git
         run: |
@@ -44,8 +53,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find any styx branch on remote
-          BRANCH=$(git ls-remote --heads origin 'refs/heads/styx/*' | awk '{print $2}' | sed 's|refs/heads/||' | head -1)
+          BRANCH=$(git branch -r --list 'origin/styx/*' | head -1 | sed 's|origin/||' | xargs)
+
           if [ -z "$BRANCH" ]; then
             echo "No styx/* branch found, skipping push/PR"
             exit 0
@@ -53,28 +62,21 @@ jobs:
 
           echo "Found branch: $BRANCH"
 
-          # Checkout the branch locally if not already on it
-          if [ "$(git branch --show-current)" != "$BRANCH" ]; then
-            git fetch origin "$BRANCH"
-            git checkout "$BRANCH"
+          if ! git push -u origin "$BRANCH" 2>/dev/null; then
+            echo "::warning::Push failed for $BRANCH"
+            exit 0
           fi
 
-          # Ensure branch is up to date with remote
-          git pull origin "$BRANCH" || true
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || echo "")
 
-          # Try to open PR, don't fail if not permitted
-          if ! gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q .; then
-            echo "Opening PR for $BRANCH"
-            if gh pr create \
+          if [ -z "$EXISTING_PR" ]; then
+            if ! gh pr create \
               --base master \
               --head "$BRANCH" \
               --title "Styx: auto-fixes from $(date -u +%Y-%m-%d)" \
-              --body "Automated code review fixes by Styx."; then
-              echo "PR created successfully"
-            else
-              echo "::warning::gh pr create failed — create PR manually at:"
-              echo "::warning::https://github.com/${{ github.repository }}/pull/new/$BRANCH"
+              --body "Automated code review fixes by Styx." 2>/dev/null; then
+              echo "::warning::gh pr create failed"
             fi
           else
-            echo "PR already exists for $BRANCH"
+            echo "PR #$EXISTING_PR already exists"
           fi

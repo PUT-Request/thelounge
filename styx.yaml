@@ -1,31 +1,51 @@
 # Styx task configuration
 prompt: |
-    Review all TypeScript files in this repository for common issues:
-    - Unhandled errors
-    - Race conditions
-    - Missing documentation on exported functions
+  You are auditing and FIXING bugs in this TypeScript repository (The Lounge — self-hosted Web IRC client).
 
-    Create ONE branch named `styx/fixes-<unix-timestamp>` off the latest `master`.
-    Make all fixes on that single branch, committing as you go.
+  IMPORTANT: You must create a new git branch, fix the bugs you find, and commit.
 
-    IMPORTANT RULES:
-    - Do NOT commit the `styx` binary
-    - Do NOT create multiple branches — everything goes on one branch
+  Steps:
+  1. Create a branch: git checkout -b styx/fixes-$(date +%s)
+  2. Install dependencies: npm ci
+  3. Audit all TypeScript files (.ts, .tsx) for bugs
+  4. Fix each bug you find
+  5. After EVERY fix, verify it compiles:
+     - npm run build
+     - npx tsc --noEmit
+  6. Run tests: npm run test
+  7. If compilation or tests fail, fix the issue before committing
+  8. Commit each fix with a descriptive message
+  9. Push the branch only after all fixes compile and pass tests
 
-    After all fixes are committed, verify by running:
-    - git status
-    - git diff
-    - git log --oneline -5
-    - git push -u origin $(git branch --show-current)
-    - git ls-remote --heads origin
+  MANDATORY BUILD VERIFICATION:
+  - Run `npm run build` after every change
+  - Run `npx tsc --noEmit` to catch type errors
+  - Run `npm run test` to verify tests pass
+  - NEVER commit code that doesn't compile
+  - NEVER push a branch with failing tests
 
-    In your final message, return the EXACT word-for-word output of each command you ran. Do not summarize or paraphrase — paste the raw terminal output.
+  Look for:
+  1. Unhandled errors — any error return value ignored that could fail
+  2. Race conditions — shared state accessed without proper locking
+  3. Resource leaks — unclosed connections, response bodies, file handles
+  4. Null/undefined dereferences — especially in error paths
+  5. Security issues — XSS, CSRF, missing auth checks, injection
+  6. Type safety issues — any casts, missing null checks, wrong types
+  7. Off-by-one errors — boundary conditions, buffer sizes
+  8. Async issues — missing await, unhandled promises, floating promises
+
+  For EACH bug fixed:
+  - File and line number
+  - Severity: critical | high | medium | low
+  - What was wrong
+  - What you changed
+
+  After fixing, commit and push. End with summary of fixes.
 
 mode: read_write
 
-api_endpoint: $STYX_API_ENDPOINT
-api_key: $STYX_API_KEY
-model: meta/muse-spark-1.3-contributor
-max_context: 200000
-
-max_working_time: 50m
+api_endpoint: https://llm.fmhy.bid/v1
+api_key: sk-_ZuwHi7Cj3HZyHvpVl4EjNdIUgDn17RpR
+model: meituan/LongCat-2.0:free
+max_context: 2560000
+max_working_time: 60m
