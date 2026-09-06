@@ -1,46 +1,46 @@
 # Styx task configuration
 prompt: |
-  You are auditing and FIXING bugs in this TypeScript repository (The Lounge — self-hosted Web IRC client).
+    You are auditing and FIXING bugs in this TypeScript repository (The Lounge — self-hosted Web IRC client).
 
-  IMPORTANT: You must create a new git branch, fix the bugs you find, and commit.
+    IMPORTANT: You must create a new git branch, fix the bugs you find, and commit.
 
-  Steps:
-  1. Create a branch: git checkout -b styx/fixes-$(date +%s)
-  2. Install dependencies: npm ci
-  3. Audit all TypeScript files (.ts, .tsx) for bugs
-  4. Fix each bug you find
-  5. After EVERY fix, verify it compiles:
-     - npm run build
-     - npx tsc --noEmit
-  6. Run tests: npm run test
-  7. If compilation or tests fail, fix the issue before committing
-  8. Commit each fix with a descriptive message
-  9. Push the branch only after all fixes compile and pass tests
+    Steps:
+    1. Create a branch: git checkout -b styx/fixes-$(date +%s)
+    2. Install dependencies: npm ci
+    3. Audit all TypeScript files (.ts, .tsx) for bugs
+    4. Fix each bug you find
+    5. After EVERY fix, verify it compiles:
+       - npm run build
+       - npx tsc --noEmit
+    6. Run tests: npm run test
+    7. If compilation or tests fail, fix the issue before committing
+    8. Commit each fix with a descriptive message
+    9. Push the branch only after all fixes compile and pass tests
 
-  MANDATORY BUILD VERIFICATION:
-  - Run `npm run build` after every change
-  - Run `npx tsc --noEmit` to catch type errors
-  - Run `npm run test` to verify tests pass
-  - NEVER commit code that doesn't compile
-  - NEVER push a branch with failing tests
+    MANDATORY BUILD VERIFICATION:
+    - Run `npm run build` after every change
+    - Run `npx tsc --noEmit` to catch type errors
+    - Run `npm run test` to verify tests pass
+    - NEVER commit code that doesn't compile
+    - NEVER push a branch with failing tests
 
-  Look for:
-  1. Unhandled errors — any error return value ignored that could fail
-  2. Race conditions — shared state accessed without proper locking
-  3. Resource leaks — unclosed connections, response bodies, file handles
-  4. Null/undefined dereferences — especially in error paths
-  5. Security issues — XSS, CSRF, missing auth checks, injection
-  6. Type safety issues — any casts, missing null checks, wrong types
-  7. Off-by-one errors — boundary conditions, buffer sizes
-  8. Async issues — missing await, unhandled promises, floating promises
+    Look for:
+    1. Unhandled errors — any error return value ignored that could fail
+    2. Race conditions — shared state accessed without proper locking
+    3. Resource leaks — unclosed connections, response bodies, file handles
+    4. Null/undefined dereferences — especially in error paths
+    5. Security issues — XSS, CSRF, missing auth checks, injection
+    6. Type safety issues — any casts, missing null checks, wrong types
+    7. Off-by-one errors — boundary conditions, buffer sizes
+    8. Async issues — missing await, unhandled promises, floating promises
 
-  For EACH bug fixed:
-  - File and line number
-  - Severity: critical | high | medium | low
-  - What was wrong
-  - What you changed
+    For EACH bug fixed:
+    - File and line number
+    - Severity: critical | high | medium | low
+    - What was wrong
+    - What you changed
 
-  After fixing, commit and push. End with summary of fixes.
+    After fixing, commit and push. End with summary of fixes.
 
 mode: read_write
 

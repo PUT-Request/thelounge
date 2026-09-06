@@ -29,9 +29,7 @@ export default (network: CollapsibleNetwork, isCollapsed: boolean): void => {
 			const parsed: unknown = JSON.parse(stored);
 
 			if (Array.isArray(parsed)) {
-				collapsedUuids = parsed.filter(
-					(uuid): uuid is string => typeof uuid === "string"
-				);
+				collapsedUuids = parsed.filter((uuid): uuid is string => typeof uuid === "string");
 			}
 		} catch {
 			collapsedUuids = [];
