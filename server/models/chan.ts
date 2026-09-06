@@ -16,6 +16,7 @@ import {
 	TorrentSiteInfo,
 } from "../../shared/types/chan";
 import {SharedNetworkChan} from "../../shared/types/network";
+import {ircCasefold, type IrcCaseMapping} from "../../shared/irc";
 
 export type ChanConfig = {
 	name: string;
@@ -40,6 +41,7 @@ class Chan {
 	type!: ChanType;
 	state!: ChanState;
 	pinned!: boolean;
+	caseMapping!: IrcCaseMapping;
 	// Whether history was ever loaded from the message provider for this
 	// session. connect() only eager-loads the last-active channel per
 	// network now; other channels load on first open(). Not persisted
@@ -73,6 +75,7 @@ class Chan {
 			torrentSite: undefined,
 			userAway: null,
 			historyLoaded: false,
+			caseMapping: "rfc1459",
 		});
 
 		if (this.type === ChanType.QUERY) {
@@ -189,7 +192,7 @@ class Chan {
 	}
 
 	findUser(nick: string) {
-		return this.users.get(nick.toLowerCase());
+		return this.users.get(ircCasefold(nick, this.caseMapping));
 	}
 
 	getUser(nick: string) {
@@ -197,11 +200,22 @@ class Chan {
 	}
 
 	setUser(user: User) {
-		this.users.set(user.nick.toLowerCase(), user);
+		this.users.set(ircCasefold(user.nick, this.caseMapping), user);
 	}
 
 	removeUser(user: User) {
-		this.users.delete(user.nick.toLowerCase());
+		this.users.delete(ircCasefold(user.nick, this.caseMapping));
+	}
+
+	setCaseMapping(caseMapping: IrcCaseMapping) {
+		if (this.caseMapping === caseMapping) {
+			return;
+		}
+
+		this.caseMapping = caseMapping;
+		this.users = new Map(
+			Array.from(this.users.values(), (user) => [ircCasefold(user.nick, caseMapping), user])
+		);
 	}
 
 	/**
@@ -257,6 +271,7 @@ class Chan {
 			type: this.type,
 			state: this.state,
 			pinned: this.pinned,
+			caseMapping: this.caseMapping,
 
 			isOnline: this.isOnline,
 			userAway: this.userAway,
@@ -416,14 +431,18 @@ class Chan {
 	}
 }
 
-// Content key for deduplicating a late history load against live messages
-// that arrived while history was still unloaded: the same logical message
-// would otherwise appear twice under two different session ids (see
-// loadMessages). Exact-match only - a false positive merely hides one
-// duplicate-looking message until the next reconnect.
-// Also used to drop CHATHISTORY playback that we already have.
+// Prefer identities supplied by durable storage or the IRC server. Content is
+// not an identity: two equal messages can legitimately share a timestamp.
 export function historyDedupeKey(msg: Msg): string {
-	return `${msg.time.getTime()}|${msg.type}|${msg.from?.nick ?? ""}|${msg.text}`;
+	if (msg.storageId !== undefined) {
+		return `storage:${msg.storageId}`;
+	}
+
+	if (msg.msgid) {
+		return `msgid:${msg.msgid}`;
+	}
+
+	return `session:${msg.id}`;
 }
 
 function requestZncPlayback(channel: Chan, network: Network, from: number) {

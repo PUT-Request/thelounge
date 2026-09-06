@@ -196,8 +196,11 @@ export function generateChannelContextMenu(
 						text: "/ignore " + channel.name,
 					});
 				},
-			},
-			{
+			}
+		);
+
+		if (store.state.settings.enhancedContextMenuEnabled) {
+			items.push({
 				label: channel.pinned ? "Unpin conversation" : "Pin conversation",
 				type: "item",
 				class: "pin",
@@ -207,8 +210,8 @@ export function generateChannelContextMenu(
 						setPinnedTo: !channel.pinned,
 					});
 				},
-			}
-		);
+			});
+		}
 	}
 
 	if (channel.type === ChanType.CHANNEL || channel.type === ChanType.QUERY) {

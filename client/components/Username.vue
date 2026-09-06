@@ -16,7 +16,6 @@
 <script lang="ts">
 import {computed, defineComponent, PropType} from "vue";
 import {UserInMessage} from "../../shared/types/msg";
-import {ChanState} from "../../shared/types/chan";
 import eventbus from "../js/eventbus";
 import colorClass from "../js/helpers/colorClass";
 import type {ClientChan, ClientNetwork} from "../js/types";
@@ -80,24 +79,6 @@ export default defineComponent({
 		};
 
 		const store = useStore();
-
-		// Add bridged users to autocomplete (need to switch channel after
-		// connect if channel active on connect)
-		if (
-			store.state.settings.beautifyBridgedMessages &&
-			props.user.shoutbox &&
-			store.state.activeChannel?.channel.state === ChanState.JOINED &&
-			!store.state.activeChannel?.channel.users.find((u) => u.nick === props.user.nick)
-		) {
-			store.state.activeChannel?.channel.users.push({
-				nick: props.user.nick!,
-				modes: [],
-				mode: "",
-				away: "",
-				lastMessage: Date.now(),
-				isBot: false,
-			});
-		}
 
 		// Allow adjusting nick display via setting
 		const displayNick = computed(() => {

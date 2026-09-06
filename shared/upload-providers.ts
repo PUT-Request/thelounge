@@ -18,7 +18,14 @@ export interface UploadProvider {
 	 * @param token Optional API token (required by some providers).
 	 * @returns Promise resolving to the public file URL.
 	 */
-	upload: (file: File, ttl: string, token?: string) => Promise<string>;
+	upload: (
+		file: File,
+		ttl: string,
+		token?: string,
+		signal?: AbortSignal,
+		requestUrl?: string,
+		fetcher?: typeof fetch
+	) => Promise<string>;
 }
 
 interface UploadTTL {
@@ -26,6 +33,104 @@ interface UploadTTL {
 	displayName: string;
 	value: string;
 	default?: boolean;
+}
+
+const MAX_PROVIDER_RESPONSE_SIZE = 1024 * 1024;
+
+function requireProviderToken(token: string | undefined, provider: string): string {
+	if (!token) {
+		throw new Error(`API token is required for ${provider} uploads`);
+	}
+
+	return token;
+}
+
+async function providerFetch(
+	url: string,
+	init: RequestInit,
+	signal?: AbortSignal,
+	request: typeof fetch = fetch
+): Promise<Response> {
+	return request(url, {...init, signal, redirect: "error"});
+}
+
+async function readProviderText(response: Response): Promise<string> {
+	const declaredLength = Number(response.headers.get("content-length"));
+
+	if (Number.isFinite(declaredLength) && declaredLength > MAX_PROVIDER_RESPONSE_SIZE) {
+		throw new Error("Upload provider response is too large");
+	}
+
+	if (!response.body) {
+		return "";
+	}
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let length = 0;
+
+	try {
+		while (true) {
+			const {done, value} = await reader.read();
+
+			if (done) {
+				break;
+			}
+
+			length += value.byteLength;
+
+			if (length > MAX_PROVIDER_RESPONSE_SIZE) {
+				throw new Error("Upload provider response is too large");
+			}
+
+			chunks.push(value);
+		}
+	} catch (error) {
+		await reader.cancel().catch(() => undefined);
+		throw error;
+	}
+
+	const body = new Uint8Array(length);
+	let offset = 0;
+
+	for (const chunk of chunks) {
+		body.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	return new TextDecoder().decode(body);
+}
+
+async function readProviderJson(response: Response): Promise<any> {
+	try {
+		return JSON.parse(await readProviderText(response));
+	} catch (error) {
+		if (error instanceof Error && error.message === "Upload provider response is too large") {
+			throw error;
+		}
+
+		throw new Error("Upload provider returned an invalid response");
+	}
+}
+
+function requireUploadUrl(value: unknown): string {
+	if (typeof value !== "string") {
+		throw new Error("Upload provider did not return a URL");
+	}
+
+	let url: URL;
+
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error("Upload provider did not return a valid URL");
+	}
+
+	if (url.protocol !== "https:" && url.protocol !== "http:") {
+		throw new Error("Upload provider returned an unsafe URL");
+	}
+
+	return url.toString();
 }
 
 /**
@@ -111,35 +216,33 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images",
-		async upload(file: File, ttl: string, token?: string) {
+		async upload(file: File, ttl: string, token?: string, signal?: AbortSignal) {
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
-			payload.append("key", token!);
+			payload.append("key", requireProviderToken(token, "ImageBB"));
 			payload.append("image", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
 				payload.append("expiration", uploadTTL.value);
 			}
 
-			const response = await fetch("https://api.imgbb.com/1/upload", {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				"https://api.imgbb.com/1/upload",
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const json = await response.json();
+			const json = await readProviderJson(response);
 
 			if (!response.ok) {
 				throw new Error(json.error?.message ?? "Unknown Error");
 			}
 
-			const url = <string>json.data?.url ?? "";
-
-			if (!url.startsWith("http")) {
-				throw new Error(url ?? "Unknown Error");
-			}
-
-			return url;
+			return requireUploadUrl(json.data?.url);
 		},
 	},
 	{
@@ -165,7 +268,7 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images, Videos, Audio, and Text",
-		async upload(file: File, ttl: string) {
+		async upload(file: File, ttl: string, _token?: string, signal?: AbortSignal) {
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
@@ -179,18 +282,22 @@ export const UploadProviders: UploadProvider[] = [
 				uploadUrl = "https://litterbox.catbox.moe/resources/internals/api.php";
 			}
 
-			const response = await fetch(uploadUrl, {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				uploadUrl,
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const url = await response.text();
+			const url = await readProviderText(response);
 
 			if (!response.ok || !url.startsWith("http")) {
 				throw new Error(url ?? "Unknown Error");
 			}
 
-			return url;
+			return requireUploadUrl(url);
 		},
 	},
 	{
@@ -221,30 +328,34 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images",
-		async upload(file: File, ttl: string, token?: string) {
+		async upload(file: File, ttl: string, token?: string, signal?: AbortSignal) {
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
 			payload.append("format", "txt");
-			payload.append("key", token!);
+			payload.append("key", requireProviderToken(token, "PTScreens"));
 			payload.append("source", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
 				payload.append("expiration", uploadTTL.value);
 			}
 
-			const response = await fetch("https://ptscreens.com/api/1/upload", {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				"https://ptscreens.com/api/1/upload",
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const url = await response.text();
+			const url = await readProviderText(response);
 
 			if (!response.ok || !url.startsWith("http")) {
 				throw new Error(url ?? "Unknown Error");
 			}
 
-			return url;
+			return requireUploadUrl(url);
 		},
 	},
 	{
@@ -275,19 +386,23 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images, Video, and Text",
-		async upload(file: File, ttl: string) {
+		async upload(file: File, ttl: string, _token?: string, signal?: AbortSignal) {
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
 			payload.append("files[]", file);
 			payload.append("expiry", uploadTTL?.value ?? "-1");
 
-			const response = await fetch("https://qu.ax/upload", {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				"https://qu.ax/upload",
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const raw = await response.text();
+			const raw = await readProviderText(response);
 			let json: any = null;
 
 			try {
@@ -312,7 +427,7 @@ export const UploadProviders: UploadProvider[] = [
 				throw new Error("Unknown Error");
 			}
 
-			return `https://qu.ax/x/${fName}.${file.name.split(".").pop()}`;
+			return requireUploadUrl(`https://qu.ax/x/${fName}.${file.name.split(".").pop()}`);
 		},
 	},
 	{
@@ -328,28 +443,26 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images, Video, Audio, and Text",
-		async upload(file: File) {
+		async upload(file: File, _ttl: string, _token?: string, signal?: AbortSignal) {
 			const payload = new FormData();
 			payload.append("files[]", file);
 
-			const response = await fetch("https://uguu.se/upload", {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				"https://uguu.se/upload",
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const json = await response.json();
+			const json = await readProviderJson(response);
 
 			if (!response.ok || json?.success !== true) {
 				throw new Error(json?.description ?? "Unknown Error");
 			}
 
-			const url = <string>json?.files?.[0]?.url ?? "";
-
-			if (!url.startsWith("http")) {
-				throw new Error(url || "Unknown Error");
-			}
-
-			return url;
+			return requireUploadUrl(json?.files?.[0]?.url);
 		},
 	},
 	{
@@ -380,30 +493,34 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images",
-		async upload(file: File, ttl: string, token?: string) {
+		async upload(file: File, ttl: string, token?: string, signal?: AbortSignal) {
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
 			payload.append("format", "txt");
-			payload.append("key", token!);
+			payload.append("key", requireProviderToken(token, "OnlyImage"));
 			payload.append("source", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
 				payload.append("expiration", uploadTTL.value);
 			}
 
-			const response = await fetch("https://onlyimage.org/api/1/upload", {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				"https://onlyimage.org/api/1/upload",
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const url = await response.text();
+			const url = await readProviderText(response);
 
 			if (!response.ok || !url.startsWith("http")) {
 				throw new Error(url ?? "Unknown Error");
 			}
 
-			return url;
+			return requireUploadUrl(url);
 		},
 	},
 	{
@@ -434,30 +551,34 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images",
-		async upload(file: File, ttl: string, token?: string) {
+		async upload(file: File, ttl: string, token?: string, signal?: AbortSignal) {
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
 			payload.append("format", "txt");
-			payload.append("key", token!);
+			payload.append("key", requireProviderToken(token, "img.tnb.moe"));
 			payload.append("source", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
 				payload.append("expiration", uploadTTL.value);
 			}
 
-			const response = await fetch("https://img.tnb.moe/api/1/upload", {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				"https://img.tnb.moe/api/1/upload",
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal
+			);
 
-			const url = await response.text();
+			const url = await readProviderText(response);
 
 			if (!response.ok || !url.startsWith("http")) {
 				throw new Error(url ?? "Unknown Error");
 			}
 
-			return url;
+			return requireUploadUrl(url);
 		},
 	},
 	{
@@ -473,27 +594,31 @@ export const UploadProviders: UploadProvider[] = [
 			},
 		],
 		supportNote: "Supported files: Images",
-		async upload(file: File, ttl: string, token?: string) {
+		async upload(file: File, _ttl: string, token?: string, signal?: AbortSignal) {
 			const payload = new FormData();
 			payload.append("format", "json");
-			payload.append("api_key", token!);
+			payload.append("api_key", requireProviderToken(token, "ptpimg"));
 			payload.append("file-upload[0]", file);
 
-			const response = await fetch("https://ptpimg.me/upload.php", {
-				method: "POST",
-				headers: {
-					referer: "https://ptpimg.me/index.php",
+			const response = await providerFetch(
+				"https://ptpimg.me/upload.php",
+				{
+					method: "POST",
+					headers: {
+						referer: "https://ptpimg.me/index.php",
+					},
+					body: payload,
 				},
-				body: payload,
-			});
+				signal
+			);
 
-			const json = await response.json();
+			const json = await readProviderJson(response);
 
 			if (!response.ok || !json?.[0]?.code || !json?.[0]?.ext) {
 				throw new Error(json?.error?.message ?? "Unknown Error");
 			}
 
-			return `https://ptpimg.me/${json[0].code}.${json[0].ext}`;
+			return requireUploadUrl(`https://ptpimg.me/${json[0].code}.${json[0].ext}`);
 		},
 	},
 	{
@@ -503,16 +628,18 @@ export const UploadProviders: UploadProvider[] = [
 		requiresToken: true,
 		supportNote:
 			"Supported files: Images, Videos, Audio, and Text\nNOTE: You must have 'Hide Media by Default' disabled for your profile",
-		async upload(file: File, ttl: string, url_token?: string) {
-			const [encodedRequestURL, auth] = url_token!.split("_|_");
-			const requestURL = atob(encodedRequestURL);
+		async upload(
+			file: File,
+			_ttl: string,
+			token?: string,
+			signal?: AbortSignal,
+			requestUrl?: string,
+			fetcher?: typeof fetch
+		) {
+			const auth = requireProviderToken(token, "XBackBone");
 
-			if (!requestURL.startsWith("http")) {
-				throw new Error("Invalid Upload URL");
-			}
-
-			if (!auth || (auth.startsWith("_") && auth.endsWith("_"))) {
-				throw new Error("Invalid Upload Token");
+			if (!requestUrl) {
+				throw new Error("Upload URL is required for XBackBone uploads");
 			}
 
 			const payload = new FormData();
@@ -520,24 +647,23 @@ export const UploadProviders: UploadProvider[] = [
 			payload.append("token", auth);
 			payload.append("upload", file);
 
-			const response = await fetch(requestURL, {
-				method: "POST",
-				body: payload,
-			});
+			const response = await providerFetch(
+				requestUrl,
+				{
+					method: "POST",
+					body: payload,
+				},
+				signal,
+				fetcher
+			);
 
-			const json = await response.json();
+			const json = await readProviderJson(response);
 
 			if (!response.ok) {
 				throw new Error("Unknown Error");
 			}
 
-			const url = <string>json.raw_url ?? "";
-
-			if (!url.startsWith("http")) {
-				throw new Error("Unknown Error");
-			}
-
-			return url;
+			return requireUploadUrl(json.raw_url);
 		},
 	},
 ];

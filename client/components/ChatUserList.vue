@@ -125,6 +125,7 @@
 import {filter as fuzzyFilter} from "fuzzy";
 import {computed, defineComponent, nextTick, PropType, ref} from "vue";
 import type {UserInMessage} from "../../shared/types/msg";
+import {ircCasefold} from "../../shared/irc";
 import type {ClientChan, ClientUser} from "../js/types";
 import {useStore} from "../js/store";
 import Username from "./Username.vue";
@@ -191,26 +192,71 @@ export default defineComponent({
 
 		const customGroupedUsers = computed(() => {
 			const groups: Record<string, any[]> = {};
+			const assigned = new Set<string>();
+			const foldNick = (nick: string) =>
+				ircCasefold(nick, props.channel.caseMapping ?? "rfc1459");
 
 			if (userSearchInput.value && filteredUsers.value) {
 				const filtered = filteredUsers.value.filter((user) => user.original.nick);
 
 				for (const {name, users} of props.channel.groups ?? []) {
-					const matched = filtered.filter((user) =>
-						users
-							.map((u: string) => u.toLowerCase())
-							.includes(user.original.nick.toLowerCase())
-					);
+					const groupNicks = new Set(users.map((user: string) => foldNick(user)));
+					const matched = filtered.filter((user) => {
+						const key = foldNick(user.original.nick);
+
+						if (!groupNicks.has(key) || assigned.has(key)) {
+							return false;
+						}
+
+						assigned.add(key);
+						return true;
+					});
 
 					if (matched.length > 0) {
 						groups[name] = matched;
 					}
 				}
+
+				const ungrouped = filtered.filter(
+					(user) => !assigned.has(foldNick(user.original.nick))
+				);
+
+				if (ungrouped.length > 0) {
+					groups.Other = ungrouped;
+				}
 			} else {
 				for (const {name, users} of props.channel.groups ?? []) {
-					groups[name] = users
-						.map((nick: string) => props.channel.users.find((u) => u.nick === nick))
+					const groupUsers = users
+						.map((nick: string) => {
+							const key = foldNick(nick);
+
+							if (assigned.has(key)) {
+								return undefined;
+							}
+
+							const user = props.channel.users.find(
+								(candidate) => foldNick(candidate.nick) === key
+							);
+
+							if (user) {
+								assigned.add(key);
+							}
+
+							return user;
+						})
 						.filter(Boolean);
+
+					if (groupUsers.length > 0) {
+						groups[name] = groupUsers;
+					}
+				}
+
+				const ungrouped = props.channel.users.filter(
+					(user) => !assigned.has(foldNick(user.nick))
+				);
+
+				if (ungrouped.length > 0) {
+					groups.Other = ungrouped;
 				}
 			}
 

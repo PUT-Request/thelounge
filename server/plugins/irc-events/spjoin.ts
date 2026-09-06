@@ -1,5 +1,6 @@
 import type {IrcEventHandler} from "../../client";
 import log from "../../log";
+import {ircCasefold} from "../../../shared/irc";
 
 export default <IrcEventHandler>function (irc, network) {
 	// Handle SPJOIN command from seedpool/enhanced capable servers
@@ -13,7 +14,14 @@ export default <IrcEventHandler>function (irc, network) {
 		const nickname = command.params[1];
 		const groupName = command.params[2];
 
-		if (!channelName || !nickname || !groupName) {
+		if (
+			!channelName ||
+			!nickname ||
+			!groupName ||
+			channelName.length > 512 ||
+			nickname.length > 512 ||
+			groupName.length > 100
+		) {
 			log.warn("SPJOIN: Missing channel, nickname, or group");
 			return;
 		}
@@ -30,9 +38,11 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		// Remove user from any existing group (in case of group change)
+		const foldedNick = ircCasefold(nickname, chan.caseMapping);
+
 		for (const group of chan.groups) {
-			const lowerUsers = group.users.map((u) => u.toLowerCase());
-			const userIndex = lowerUsers.indexOf(nickname.toLowerCase());
+			const foldedUsers = group.users.map((user) => ircCasefold(user, chan.caseMapping));
+			const userIndex = foldedUsers.indexOf(foldedNick);
 
 			if (userIndex !== -1) {
 				group.users.splice(userIndex, 1);
@@ -43,6 +53,11 @@ export default <IrcEventHandler>function (irc, network) {
 		let targetGroup = chan.groups.find((g) => g.name === groupName);
 
 		if (!targetGroup) {
+			if (chan.groups.length >= 100) {
+				log.warn(`SPJOIN: Refusing to add more groups for ${channelName}`);
+				return;
+			}
+
 			// Find the lowest existing position and go below it
 			const lowestPosition =
 				chan.groups.length > 0 ? Math.min(...chan.groups.map((g) => g.position)) - 1 : 0;
@@ -51,7 +66,12 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		// Add user to the group
-		if (!targetGroup.users.map((u) => u.toLowerCase()).includes(nickname.toLowerCase())) {
+		if (
+			targetGroup.users.length < 5000 &&
+			!targetGroup.users
+				.map((user) => ircCasefold(user, chan.caseMapping))
+				.includes(foldedNick)
+		) {
 			targetGroup.users.push(nickname);
 		}
 

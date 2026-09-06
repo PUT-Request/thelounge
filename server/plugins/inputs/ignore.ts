@@ -26,7 +26,7 @@ const input: PluginInputHandler = function (network, chan, cmd, args) {
 	switch (cmd) {
 		case "ignore": {
 			// IRC nicks are case insensitive
-			if (hostmask.nick.toLowerCase() === network.nick.toLowerCase()) {
+			if (network.casefold(hostmask.nick) === network.casefold(network.nick)) {
 				chan.pushMessage(
 					client,
 					new Msg({

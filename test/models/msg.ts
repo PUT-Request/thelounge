@@ -26,6 +26,14 @@ describe("Msg", function () {
 		});
 	});
 
+	it("preserves server-authenticated bot metadata in message senders", function () {
+		const msg = new Msg({
+			from: new User({nick: "bridgebot", isBot: true}),
+		});
+
+		expect(msg.from).to.deep.equal({mode: "", nick: "bridgebot", isBot: true});
+	});
+
 	describe("#findPreview(link)", function () {
 		const msg = new Msg({
 			previews: [

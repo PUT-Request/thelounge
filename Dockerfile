@@ -6,7 +6,7 @@
 #
 # Published to ghcr.io/PUT-Request/thelounge by .github/workflows/docker.yml.
 
-FROM node:24-slim AS build
+FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS build
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY . .
 
 RUN NODE_ENV=production yarn build
 
-FROM node:24-slim
+FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
 
 ENV NODE_ENV=production \
 	THELOUNGE_HOME=/home/lounge/data
@@ -43,6 +43,6 @@ EXPOSE 9000
 
 VOLUME /home/lounge/data
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:9000/').then((r) => {if (!r.ok) {process.exit(1);}}).catch(() => process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:9000/healthz').then((r) => {if (!r.ok) {process.exit(1);}}).catch(() => process.exit(1))"
 
 CMD ["node", "index.js", "start"]

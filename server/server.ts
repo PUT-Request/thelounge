@@ -23,6 +23,12 @@ import inputs from "./plugins/inputs";
 import Auth from "./plugins/auth";
 import {VALID_TYPING_STATUSES} from "../shared/types/typing";
 import {injectServerConfig} from "./plugins/html-config";
+import {
+	isValidBooleanTargetChange,
+	isValidInvitationDismiss,
+	isValidSearchQuery,
+	isValidTarget,
+} from "./socketValidation";
 
 import themes from "./plugins/packages/themes";
 themes.loadLocalThemes();
@@ -65,12 +71,16 @@ const serverHash = Math.floor(Date.now() * Math.random());
 
 let manager: ClientManager | null = null;
 let isDev = false;
+let isReady = false;
+
+const SEARCH_RATE_LIMIT_MS = 500;
 
 export default async function (
 	options: ServerOptions = {
 		dev: false,
 	}
 ) {
+	isReady = false;
 	log.info(`The Lounge ${colors.green(Helper.getVersion())} \
 (Node.js ${colors.green(process.versions.node)} on ${colors.green(process.platform)} ${
 		process.arch
@@ -98,6 +108,9 @@ export default async function (
 		.get("/", indexRequest)
 		.get("/service-worker.js", forceNoCacheRequest)
 		.get("/version-hash", forceNoCacheRequest, versionHashRequest)
+		.get("/healthz", (_req, res) =>
+			isReady ? res.status(200).send("ready") : res.status(503).send("initializing")
+		)
 		.use(express.static(Utils.getFileFromRelativeToRoot("public"), staticOptions))
 		.use("/storage/", express.static(Config.getStoragePath(), staticOptions));
 
@@ -233,6 +246,22 @@ export default async function (
 				threshold: 1024, // skip compressing tiny/frequent payloads
 			},
 		});
+		let resolveReady!: () => void;
+		let rejectReady!: (error: Error) => void;
+		const ready = new Promise<void>((resolve, reject) => {
+			resolveReady = resolve;
+			rejectReady = reject;
+		});
+		// Initialization may fail before the first socket attempts a handshake.
+		// Keep that rejection observed; the middleware below still receives it.
+		void ready.catch(() => undefined);
+
+		// Queue handshakes until users, storage, and WebPush have finished
+		// initializing. This closes the startup window where authentication could
+		// observe a partially constructed ClientManager.
+		sockets.use((_socket, next) => {
+			void ready.then(() => next(), next);
+		});
 
 		sockets.on("connect", (socket) => {
 			socket.on("error", (err) => log.error(`io socket error: ${err}`));
@@ -264,13 +293,32 @@ export default async function (
 		new Identification((identHandler, err) => {
 			if (err) {
 				log.error(`Could not start identd server, ${err.message}`);
-				process.exit(1);
+				rejectReady(err);
+				server.close();
+				return;
 			} else if (!manager) {
-				log.error("Could not start identd server, ClientManager is undefined");
-				process.exit(1);
+				const error = new Error(
+					"Could not start identd server, ClientManager is undefined"
+				);
+				log.error(error.message);
+				rejectReady(error);
+				server.close();
+				return;
 			}
 
-			void manager.init(identHandler, sockets);
+			void manager
+				.init(identHandler, sockets)
+				.then(() => {
+					isReady = true;
+					resolveReady();
+					changelog.checkForUpdates(manager!);
+				})
+				.catch((error: unknown) => {
+					const initError = error instanceof Error ? error : new Error(String(error));
+					log.error(`Could not initialize server: ${initError.message}`);
+					rejectReady(initError);
+					server.close();
+				});
 		});
 
 		// Handle ctrl+c and kill gracefully
@@ -283,9 +331,15 @@ export default async function (
 
 			log.info("Exiting...");
 
+			let cleanShutdown = true;
+
 			// Close all client and IRC connections
 			if (manager) {
-				manager.clients.forEach((client) => client.quit());
+				manager.clients.forEach((client) => {
+					if (!client.quit()) {
+						cleanShutdown = false;
+					}
+				});
 			}
 
 			if (Config.values.prefetchStorage) {
@@ -303,7 +357,7 @@ export default async function (
 					clearTimeout(suicideTimeout);
 				}
 
-				process.exit(0);
+				process.exit(cleanShutdown ? 0 : 1);
 			});
 		};
 
@@ -322,8 +376,6 @@ export default async function (
 					log.error(`Could not clear storage folder, ${err.message}`);
 				});
 		}
-
-		changelog.checkForUpdates(manager);
 	});
 
 	return server;
@@ -736,10 +788,11 @@ function initializeClient(
 			return;
 		}
 
-		client.mentions.splice(
-			client.mentions.findIndex((m) => m.msgId === msgId),
-			1
-		);
+		const index = client.mentions.findIndex((m) => m.msgId === msgId);
+
+		if (index >= 0) {
+			client.mentions.splice(index, 1);
+		}
 	});
 
 	socket.on("mentions:dismiss_all", () => {
@@ -841,12 +894,42 @@ function initializeClient(
 			socket.emit("setting:all", clientSettings);
 		});
 
-		socket.on("search", (query) => {
-			const results = client.search(query);
-			socket.emit("search:results", results);
+		let lastSearchAt = 0;
+
+		socket.on("search", async (query) => {
+			if (!isValidSearchQuery(query)) {
+				socket.emit("error", {message: "Invalid search request"});
+				return;
+			}
+
+			const now = Date.now();
+
+			if (now - lastSearchAt < SEARCH_RATE_LIMIT_MS) {
+				socket.emit("error", {message: "Search requests are too frequent"});
+				return;
+			}
+
+			lastSearchAt = now;
+
+			try {
+				const results = await client.search(query);
+				socket.emit("search:results", results);
+			} catch (error: unknown) {
+				log.error(
+					`Search failed for ${client.name}: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
+				socket.emit("error", {message: "Search failed"});
+			}
 		});
 
-		socket.on("mute:change", ({target, setMutedTo}) => {
+		socket.on("mute:change", (data) => {
+			if (!isValidBooleanTargetChange(data, "setMutedTo")) {
+				return;
+			}
+
+			const {target, setMutedTo} = data;
 			const networkAndChan = client.find(target);
 
 			if (!networkAndChan) {
@@ -878,7 +961,12 @@ function initializeClient(
 			client.save();
 		});
 
-		socket.on("pin:change", ({target, setPinnedTo}) => {
+		socket.on("pin:change", (data) => {
+			if (!isValidBooleanTargetChange(data, "setPinnedTo")) {
+				return;
+			}
+
+			const {target, setPinnedTo} = data;
 			const networkAndChan = client.find(target);
 
 			if (!networkAndChan) {
@@ -904,7 +992,12 @@ function initializeClient(
 			client.save();
 		});
 
-		socket.on("history:server", ({target}) => {
+		socket.on("history:server", (data) => {
+			if (!_.isPlainObject(data) || !isValidTarget(data.target)) {
+				return;
+			}
+
+			const {target} = data;
 			const networkAndChan = client.find(target);
 
 			if (!networkAndChan) {
@@ -916,10 +1009,15 @@ function initializeClient(
 			fetchBeforeHistory(client, network, chan);
 		});
 
-		socket.on("invitations:dismiss", ({target, channel}) => {
+		socket.on("invitations:dismiss", (data) => {
+			if (!isValidInvitationDismiss(data)) {
+				return;
+			}
+
+			const {target, channel} = data;
 			const networkAndChan = client.find(target);
 
-			if (!networkAndChan || typeof channel !== "string") {
+			if (!networkAndChan) {
 				return;
 			}
 

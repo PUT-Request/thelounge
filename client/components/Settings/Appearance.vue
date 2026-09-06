@@ -134,7 +134,7 @@
 			<SettingToggle
 				name="beautifyBridgedMessages"
 				label="Beautify bridged shoutbox messages"
-				description="Parse bot-bridged tracker messages into real nicknames"
+				description="Parse tracker messages from bots identified by the IRC server into bridged nicknames"
 				:checked="store.state.settings.beautifyBridgedMessages"
 			/>
 			<SettingToggle
@@ -152,7 +152,7 @@
 			<SettingToggle
 				name="showAllDMs"
 				label="Show all DMs"
-				description="List all direct message windows instead of the 5 most recent"
+				description="List all direct message windows instead of the first 5 in your saved order"
 				:checked="store.state.settings.showAllDMs"
 			/>
 			<SettingToggle

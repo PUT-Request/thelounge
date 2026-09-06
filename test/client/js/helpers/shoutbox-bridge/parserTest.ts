@@ -13,7 +13,7 @@ function reactiveBridgeMessage(text: string): SharedMsg {
 		time: new Date(),
 		type: MessageType.MESSAGE,
 		text,
-		from: {nick: "chatbot", mode: ""},
+		from: {nick: "chatbot", mode: "", isBot: true},
 		users: [],
 		previews: reactive([
 			{
@@ -51,5 +51,13 @@ describe("shoutbox bridge parser", function () {
 		const original = reactiveBridgeMessage("just chatting");
 
 		expect(parser(original)).to.equal(original);
+	});
+
+	it("does not trust a matching nickname without server bot metadata", function () {
+		const original = reactiveBridgeMessage("[alice] hello");
+		original.from!.isBot = false;
+
+		expect(parser(original)).to.equal(original);
+		expect(original.from?.nick).to.equal("chatbot");
 	});
 });

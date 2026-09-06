@@ -9,4 +9,5 @@ export type SearchQuery = {
 
 export type SearchResponse = SearchQuery & {
 	results: SharedMsg[];
+	hasMore: boolean;
 };

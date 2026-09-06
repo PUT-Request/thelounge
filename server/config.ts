@@ -28,6 +28,7 @@ type FileUpload = {
 	enable: boolean;
 	maxFileSize: number;
 	baseUrl?: string;
+	externalUploadOrigins: string[];
 };
 
 export type Defaults = Pick<
@@ -316,6 +317,40 @@ class Config {
 					)}`
 				);
 			}
+		}
+
+		this.values.fileUpload.externalUploadOrigins =
+			this.values.fileUpload.externalUploadOrigins.flatMap((value) => {
+				try {
+					const url = new URL(value);
+
+					if (
+						url.protocol !== "https:" ||
+						url.username ||
+						url.password ||
+						url.pathname !== "/" ||
+						url.search ||
+						url.hash
+					) {
+						throw new Error("must be an HTTPS origin without credentials or a path");
+					}
+
+					return [url.origin];
+				} catch (error: unknown) {
+					log.warn(
+						`Ignoring invalid fileUpload.externalUploadOrigins entry ${colors.bold(
+							String(value)
+						)}: ${error instanceof Error ? error.message : String(error)}`
+					);
+					return [];
+				}
+			});
+
+		if (this.values.maskFileHost) {
+			log.warn(
+				`${colors.bold("maskFileHost")} is disabled: changing only a provider URL's host does not create the required reverse-proxy mapping.`
+			);
+			this.values.maskFileHost = false;
 		}
 
 		const manifestPath = Utils.getFileFromRelativeToRoot("public", "thelounge.webmanifest");

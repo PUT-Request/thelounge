@@ -13,6 +13,7 @@ import Chan from "../../../server/models/chan";
 import Config from "../../../server/config";
 import {ChanState, ChanType, SpecialChanType} from "../../../shared/types/chan";
 import {MessageType} from "../../../shared/types/msg";
+import {ircCasefold} from "../../../shared/irc";
 
 describe("invite center", function () {
 	beforeEach(function () {
@@ -41,6 +42,7 @@ describe("invite center", function () {
 			emit: (event: string, data: any) => emitted.push({event, data}),
 			save() {},
 			messageStorage: [],
+			flushMessageStorage() {},
 			mentions: [],
 			highlightRegex: null,
 			manager: {webPush: {push: (...args: any[]) => webPushCalls.push(args)}},
@@ -53,6 +55,7 @@ describe("invite center", function () {
 		const byName = new Map(all.map((c) => [c.name.toLowerCase(), c]));
 		const network = {
 			uuid: "net-invites",
+			casefold: (value: string) => ircCasefold(value, "rfc1459"),
 			getChannel: (name: string) => byName.get(name.toLowerCase()),
 			getLobby: () => lobby,
 			addChannel(chan: Chan) {

@@ -12,6 +12,7 @@ import Client from "../client";
 import {MessageType} from "../../shared/types/msg";
 import {ChanType} from "../../shared/types/chan";
 import {SharedNetwork} from "../../shared/types/network";
+import {ircCasefold} from "../../shared/irc";
 
 type NetworkIrcOptions = {
 	host: string;
@@ -133,6 +134,7 @@ class Network {
 
 	serverOptions!: {
 		CHANTYPES: string[];
+		CASEMAPPING: "ascii" | "strict-rfc1459" | "rfc1459";
 		PREFIX: Prefix;
 		NETWORK: string;
 		supportsReply: boolean;
@@ -168,6 +170,7 @@ class Network {
 			irc: null,
 			serverOptions: {
 				CHANTYPES: ["#", "&"],
+				CASEMAPPING: "rfc1459",
 				PREFIX: new Prefix([
 					{symbol: "!", mode: "Y"},
 					{symbol: "@", mode: "o"},
@@ -335,9 +338,7 @@ class Network {
 			"znc.in/playback", // See http://wiki.znc.in/Playback
 			"extended-monitor", // https://ircv3.net/specs/extensions/extended-monitor
 			"seedpool/enhanced", // THC enhanced client features (user groups)
-			"chathistory", // Ratified IRCv3: server-side message history
-			"draft/chathistory", // Pre-ratification name some servers still advertise
-			"draft/event-playback", // Replay JOIN/PART/QUIT as native events, not text
+			"draft/chathistory", // Work-in-progress IRCv3 server-side message history
 			"invite-notify", // INVITE notifications beyond the invite target
 			"userhost-in-names", // user@host in NAMES for accurate user tracking
 		]);
@@ -570,6 +571,7 @@ class Network {
 	}
 
 	addChannel(newChan: Chan) {
+		newChan.caseMapping = this.serverOptions.CASEMAPPING;
 		let index = this.channels.length; // Default to putting as the last item in the array
 
 		// Don't sort special channels in amongst channels/users.
@@ -696,12 +698,16 @@ class Network {
 	}
 
 	getChannel(name: string) {
-		name = name.toLowerCase();
+		name = this.casefold(name);
 
-		return _.find(this.channels, function (that, i) {
+		return _.find(this.channels, (that, i) => {
 			// Skip network lobby (it's always unshifted into first position)
-			return i > 0 && that.name.toLowerCase() === name;
+			return i > 0 && this.casefold(that.name) === name;
 		});
+	}
+
+	casefold(value: string): string {
+		return ircCasefold(value, this.serverOptions.CASEMAPPING);
 	}
 
 	monitor(target: string) {
@@ -714,7 +720,7 @@ class Network {
 			return;
 		}
 
-		target = target.toLowerCase();
+		target = this.casefold(target);
 
 		if (this.monitorList.includes(target) || this.toBeMonitored.includes(target)) {
 			return;
@@ -739,7 +745,7 @@ class Network {
 		const toAdd: string[] = [];
 
 		for (let target of targets) {
-			target = target.toLowerCase();
+			target = this.casefold(target);
 
 			if (
 				this.monitorList.includes(target) ||
@@ -793,8 +799,8 @@ class Network {
 			return;
 		}
 
-		oldTarget = oldTarget.toLowerCase();
-		newTarget = newTarget.toLowerCase();
+		oldTarget = this.casefold(oldTarget);
+		newTarget = this.casefold(newTarget);
 
 		const index = this.monitorList.indexOf(oldTarget);
 
@@ -814,7 +820,7 @@ class Network {
 			return;
 		}
 
-		target = target.toLowerCase();
+		target = this.casefold(target);
 
 		const wasMonitored = this.monitorList.includes(target);
 

@@ -27,11 +27,16 @@ function createChan(name = "#chan", messageCount = 0) {
 	return chan;
 }
 
+let fetchSetupCounter = 0;
+
 function setupFetch(channels: Chan[] = [], caps: string[] = []) {
 	const rawCalls: any[][] = [];
 	const irc = new EventEmitter() as any;
 	irc.user = {nick: "me"};
-	irc.network = {cap: {isEnabled: (cap: string) => caps.includes(cap)}};
+	irc.network = {
+		cap: {isEnabled: (cap: string) => caps.includes(cap)},
+		supports: () => undefined,
+	};
 
 	irc.raw = (...args: any[]) => {
 		rawCalls.push(args);
@@ -39,21 +44,24 @@ function setupFetch(channels: Chan[] = [], caps: string[] = []) {
 
 	const byName = new Map(channels.map((c) => [c.name, c]));
 	const network = {
+		uuid: `fetch-test-${fetchSetupCounter++}`,
 		getChannel: (name: string) => byName.get(name),
+		casefold: (name: string) => name.toLowerCase(),
 		channels,
 		irc,
+		serverOptions: {supportsChathistory: false},
 	} as any;
 
-	chathistory.call({} as any, irc, network);
+	chathistory.call({emit() {}} as any, irc, network);
 	return {irc, network, rawCalls};
 }
 
 describe("chathistory plugin", function () {
 	describe("isChathistoryAvailable", function () {
-		it("accepts the ratified capability name", function () {
+		it("rejects the unregistered capability name", function () {
 			expect(
 				isChathistoryAvailable({network: {cap: {isEnabled: (c) => c === "chathistory"}}})
-			).to.be.true;
+			).to.be.false;
 		});
 
 		it("accepts the pre-ratification draft name", function () {
@@ -72,7 +80,7 @@ describe("chathistory plugin", function () {
 
 		it("calls isEnabled with its receiver (the framework reads this.enabled)", function () {
 			const cap = {
-				enabled: ["chathistory"],
+				enabled: ["draft/chathistory"],
 				isEnabled(this: {enabled: string[]}, name: string) {
 					return this.enabled.indexOf(name) > -1;
 				},
@@ -90,7 +98,7 @@ describe("chathistory plugin", function () {
 	describe("fetch on join", function () {
 		it("fetches LATEST history on our own join of an empty channel", function () {
 			const chan = createChan();
-			const {irc, rawCalls} = setupFetch([chan], ["chathistory"]);
+			const {irc, rawCalls} = setupFetch([chan], ["draft/chathistory"]);
 
 			irc.emit("join", {nick: "me", channel: "#chan"});
 
@@ -118,7 +126,7 @@ describe("chathistory plugin", function () {
 
 		it("does nothing for other users joining", function () {
 			const chan = createChan();
-			const {irc, rawCalls} = setupFetch([chan], ["chathistory"]);
+			const {irc, rawCalls} = setupFetch([chan], ["draft/chathistory"]);
 
 			irc.emit("join", {nick: "someone", channel: "#chan"});
 
@@ -139,20 +147,22 @@ describe("chathistory plugin", function () {
 				type: ChanType.QUERY,
 				state: ChanState.JOINED,
 			});
-			const {irc, rawCalls} = setupFetch([query], ["chathistory"]);
+			const {irc, rawCalls} = setupFetch([query], ["draft/chathistory"]);
 
 			irc.emit("join", {nick: "me", channel: "someone"});
 
 			expect(rawCalls).to.have.lengthOf(0);
 		});
 
-		it("does not refetch channels that already hold history", function () {
+		it("fetches the gap after the newest message on reconnect", function () {
 			const chan = createChan("#chan", 100);
-			const {irc, rawCalls} = setupFetch([chan], ["chathistory"]);
+			chan.messages[99].time = new Date(1700000000000);
+			const {irc, rawCalls} = setupFetch([chan], ["draft/chathistory"]);
 
 			irc.emit("join", {nick: "me", channel: "#chan"});
 
-			expect(rawCalls).to.have.lengthOf(0);
+			expect(rawCalls).to.have.lengthOf(1);
+			expect(rawCalls[0][3]).to.equal("timestamp=2023-11-14T22:13:20.000Z");
 		});
 	});
 
@@ -166,17 +176,18 @@ describe("chathistory plugin", function () {
 				state: ChanState.PARTED,
 			});
 			const lobby = new Chan({name: "lobby", type: ChanType.LOBBY, state: ChanState.JOINED});
-			const {irc, rawCalls} = setupFetch([full, empty, parted, lobby], ["chathistory"]);
+			const {irc, rawCalls} = setupFetch([full, empty, parted, lobby], ["draft/chathistory"]);
 
-			irc.emit("cap ack", {capabilities: {chathistory: ""}});
+			irc.emit("cap ack", {capabilities: {"draft/chathistory": ""}});
 
-			expect(rawCalls).to.have.lengthOf(1);
-			expect(rawCalls[0][2]).to.equal("#empty");
+			expect(rawCalls).to.have.lengthOf(3);
+			expect(rawCalls.slice(0, 2).map((call) => call[2])).to.deep.equal(["#full", "#empty"]);
+			expect(rawCalls[2].slice(0, 2)).to.deep.equal(["CHATHISTORY", "TARGETS"]);
 		});
 
 		it("ignores acks that do not carry chathistory", function () {
 			const chan = createChan();
-			const {irc, rawCalls} = setupFetch([chan], ["chathistory"]);
+			const {irc, rawCalls} = setupFetch([chan], ["draft/chathistory"]);
 
 			irc.emit("cap ack", {capabilities: {"server-time": ""}});
 
@@ -204,7 +215,7 @@ describe("chathistory playback", function () {
 		const chan = new Chan({name: "#chan", type: ChanType.CHANNEL, state: ChanState.JOINED});
 		const lobby = new Chan({name: "lobby", type: ChanType.LOBBY, state: ChanState.JOINED});
 		const client = {
-			idMsg: 1,
+			idMsg: 2,
 			attachedClients: {},
 			emit(event: string, data: any) {
 				emitted.push({event, data});
@@ -217,6 +228,7 @@ describe("chathistory playback", function () {
 		} as any;
 		const network = {
 			getChannel: (name: string) => (name === "#chan" ? chan : undefined),
+			casefold: (name: string) => name.toLowerCase(),
 			getLobby: () => lobby,
 			isIgnoredUser: () => false,
 			highlightRegex: null,
@@ -270,8 +282,8 @@ describe("chathistory playback", function () {
 		const {irc, chan, emitted} = setupPlayback();
 		const time = Date.now() - 3600000;
 
-		irc.emit("privmsg", playbackPrivmsg({time}));
-		irc.emit("privmsg", playbackPrivmsg({time}));
+		irc.emit("privmsg", playbackPrivmsg({time, tags: {msgid: "same-message"}}));
+		irc.emit("privmsg", playbackPrivmsg({time, tags: {msgid: "same-message"}}));
 
 		expect(chan.messages).to.have.lengthOf(1);
 		expect(emitted.filter((e) => e.event === "msg")).to.have.lengthOf(1);
@@ -402,7 +414,11 @@ describe("chathistory load-older", function () {
 		const flushed: string[] = [];
 		const irc = new EventEmitter() as any;
 		irc.user = {nick: "me"};
-		irc.network = {cap: {isEnabled: (cap: string) => cap === "chathistory"}};
+		irc.network = {
+			cap: {isEnabled: (cap: string) => cap === "draft/chathistory"},
+			supports: () => undefined,
+			isChannelName: (name: string) => name.startsWith("#"),
+		};
 		irc.raw = (...args: any[]) => rawCalls.push(args);
 
 		const chan = new Chan({name: "#chan", type: ChanType.CHANNEL, state: ChanState.JOINED});
@@ -414,9 +430,12 @@ describe("chathistory load-older", function () {
 			flushBatch() {
 				flushed.push("flush");
 			},
+			getMessages() {
+				return [];
+			},
 		};
 		const client = {
-			idMsg: 1,
+			idMsg: 2,
 			attachedClients: {},
 			emit: (event: string, data: any) => emitted.push({event, data}),
 			save() {},
@@ -424,16 +443,27 @@ describe("chathistory load-older", function () {
 			mentions: [],
 			highlightRegex: null,
 			manager: {webPush: {push: (...args: any[]) => webPushCalls.push(args)}},
+			createChannel: (attributes: any) => new Chan(attributes),
 		} as any;
 		const network = {
 			uuid: `net-older-${setupCounter++}`,
-			getChannel: (name: string) => (name.toLowerCase() === "#chan" ? chan : undefined),
+			getChannel(name: string) {
+				return this.channels.find(
+					(candidate: Chan) => candidate.name.toLowerCase() === name.toLowerCase()
+				);
+			},
+			casefold: (name: string) => name.toLowerCase(),
 			getLobby: () => chan,
 			isIgnoredUser: () => false,
 			highlightRegex: null,
 			host: "example.com",
 			irc,
 			channels: [chan],
+			serverOptions: {supportsChathistory: true},
+			addChannel(channel: Chan) {
+				this.channels.push(channel);
+				return this.channels.length - 1;
+			},
 		} as any;
 
 		messageHandler.call(client, irc, network);
@@ -466,7 +496,7 @@ describe("chathistory load-older", function () {
 		expect(rawCalls[0][0]).to.equal("CHATHISTORY");
 		expect(rawCalls[0][1]).to.equal("BEFORE");
 		expect(rawCalls[0][2]).to.equal("#chan");
-		expect(rawCalls[0][3]).to.equal(new Date(1700000000000).toISOString());
+		expect(rawCalls[0][3]).to.equal(`timestamp=${new Date(1700000000000).toISOString()}`);
 		expect(rawCalls[0][4]).to.equal("100");
 	});
 
@@ -495,6 +525,7 @@ describe("chathistory load-older", function () {
 		chan.messages.push({id: 1, time: new Date(1700000100000), text: "live"} as any);
 
 		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		irc.emit("batch start chathistory", {id: "b1", params: ["#chan"]});
 		irc.emit("privmsg", beforePlayback(1700000050000, "newer old"));
 		irc.emit("privmsg", beforePlayback(1700000000000, "older old"));
 
@@ -502,7 +533,7 @@ describe("chathistory load-older", function () {
 		expect(emitted.filter((e) => e.event === "msg")).to.have.lengthOf(0);
 		expect(chan.messages).to.have.lengthOf(1);
 
-		irc.emit("batch end chathistory", {params: ["#chan"]});
+		irc.emit("batch end chathistory", {id: "b1", params: ["#chan"]});
 
 		const more = emitted.filter((e) => e.event === "more");
 		expect(more).to.have.lengthOf(1);
@@ -510,11 +541,9 @@ describe("chathistory load-older", function () {
 			"older old",
 			"newer old",
 		]);
-		expect(chan.messages.map((m: any) => m.text)).to.deep.equal([
-			"older old",
-			"newer old",
-			"live",
-		]);
+		// Backward pages are per-browser data and do not evict/replace the
+		// server's canonical live tail.
+		expect(chan.messages.map((m: any) => m.text)).to.deep.equal(["live"]);
 		expect(chan.unread).to.equal(0);
 		expect(webPushCalls).to.have.lengthOf(0);
 		expect(flushed.length).to.be.greaterThan(0);
@@ -531,11 +560,13 @@ describe("chathistory load-older", function () {
 			text: "dup",
 			type: MessageType.MESSAGE,
 			from: {nick: "alice"},
+			msgid: "duplicate-message",
 		} as any);
 
 		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
-		irc.emit("privmsg", beforePlayback(time, "dup"));
-		irc.emit("batch end chathistory", {params: ["#chan"]});
+		irc.emit("batch start chathistory", {id: "b1", params: ["#chan"]});
+		irc.emit("privmsg", beforePlayback(time, "dup", {tags: {msgid: "duplicate-message"}}));
+		irc.emit("batch end chathistory", {id: "b1", params: ["#chan"]});
 
 		const more = emitted.filter((e) => e.event === "more");
 		expect(more).to.have.lengthOf(1);
@@ -546,7 +577,7 @@ describe("chathistory load-older", function () {
 	it("drops batches for vanished channels and unknown batches", function () {
 		const {irc, emitted} = setupBoth();
 
-		irc.emit("batch end chathistory", {params: ["#gone"]});
+		irc.emit("batch end chathistory", {id: "unknown", params: ["#gone"]});
 		irc.emit("batch end chathistory", {params: []});
 
 		expect(emitted.filter((e) => e.event === "more")).to.have.lengthOf(0);
@@ -563,11 +594,47 @@ describe("chathistory load-older", function () {
 			context: ["#chan"],
 			description: "nope",
 		});
-		irc.emit("batch end chathistory", {params: ["#chan"]});
+		irc.emit("batch end chathistory", {id: "b1", params: ["#chan"]});
 
 		expect(emitted.filter((e) => e.event === "more")).to.have.lengthOf(0);
 		// Retry allowed after the drop
 		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
 		expect(rawCalls).to.have.lengthOf(2);
+	});
+
+	it("ignores an unrelated batch end and waits for the correlated batch id", function () {
+		const {irc, chan, client, network, emitted} = setupBoth();
+
+		expect(fetchBeforeHistory(client, network, chan)).to.be.true;
+		irc.emit("batch start chathistory", {id: "expected", params: ["#chan"]});
+		irc.emit(
+			"privmsg",
+			beforePlayback(1700000000000, "correlated", {
+				batch: {id: "expected", type: "chathistory", params: ["#chan"]},
+			})
+		);
+		irc.emit("batch end chathistory", {id: "other", params: ["#chan"]});
+		expect(emitted.filter((event) => event.event === "more")).to.have.lengthOf(0);
+
+		irc.emit("batch end chathistory", {id: "expected", params: ["#chan"]});
+		expect(emitted.filter((event) => event.event === "more")).to.have.lengthOf(1);
+	});
+
+	it("discovers missed direct-message targets and fetches their latest history", function () {
+		const {irc, network, rawCalls} = setupBoth();
+
+		irc.emit("registered");
+		expect(rawCalls[0].slice(0, 2)).to.deep.equal(["CHATHISTORY", "TARGETS"]);
+
+		irc.emit("batch start draft/chathistory-targets", {id: "targets"});
+		irc.emit("unknown command", {
+			command: "CHATHISTORY",
+			params: ["TARGETS", "bob", "2026-01-01T00:00:00.000Z"],
+			batch: {id: "targets", type: "draft/chathistory-targets"},
+		});
+		irc.emit("batch end draft/chathistory-targets", {id: "targets"});
+
+		expect(network.getChannel("bob")).to.not.be.undefined;
+		expect(rawCalls.at(-1)?.slice(0, 3)).to.deep.equal(["CHATHISTORY", "LATEST", "bob"]);
 	});
 });

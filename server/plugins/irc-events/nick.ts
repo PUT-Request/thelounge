@@ -8,7 +8,7 @@ export default <IrcEventHandler>function (irc, network) {
 	const client = this;
 
 	irc.on("nick", function (data) {
-		const self = data.nick === irc.user.nick;
+		const self = network.casefold(data.nick) === network.casefold(irc.user.nick);
 
 		if (self) {
 			network.setNick(data.new_nick);
@@ -33,7 +33,7 @@ export default <IrcEventHandler>function (irc, network) {
 				// Update monitor list for query channels that match the old nick
 				if (
 					chan.type === ChanType.QUERY &&
-					chan.name.toLowerCase() === data.nick.toLowerCase()
+					network.casefold(chan.name) === network.casefold(data.nick)
 				) {
 					network.renameMonitor(chan.name, data.new_nick);
 					chan.name = data.new_nick;

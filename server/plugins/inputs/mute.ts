@@ -15,8 +15,8 @@ function args_to_channels(network: Network, args: string[]) {
 	const targets: Chan[] = [];
 
 	for (const arg of args) {
-		const argLower = arg.toLowerCase();
-		const target = network.channels.find((c) => c.name.toLowerCase() === argLower);
+		const argFolded = network.casefold(arg);
+		const target = network.channels.find((c) => network.casefold(c.name) === argFolded);
 
 		if (target) {
 			targets.push(target);

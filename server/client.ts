@@ -115,6 +115,7 @@ class Client {
 	highlightExceptionRegex!: RegExp | null;
 	messageProvider?: SqliteMessageStorage;
 	massEventAggregator!: MassEventAggregator;
+	searchInProgress = false;
 
 	fileHash!: string;
 
@@ -166,7 +167,13 @@ class Client {
 
 			for (const messageStorage of client.messageStorage) {
 				try {
-					messageStorage.enable();
+					if (messageStorage === client.messageProvider) {
+						client.messageProvider.enable(
+							!client.manager.sqlitePreflightedUsers.has(client.name)
+						);
+					} else {
+						messageStorage.enable();
+					}
 				} catch (e: any) {
 					log.error(e);
 				}
@@ -189,7 +196,7 @@ class Client {
 			client.awayMessage = client.config.clientSettings.awayMessage;
 		}
 
-		client.config.clientSettings.searchEnabled = client.messageProvider !== undefined;
+		client.config.clientSettings.searchEnabled = client.messageProvider?.isEnabled === true;
 
 		client.compileCustomHighlights();
 
@@ -719,19 +726,6 @@ class Client {
 
 			messages = result.messages;
 
-			Helper.unshiftMany(chan.messages, messages);
-
-			// Cap the in-memory scrollback buffer: unlike the live tail
-			// (bounded by maxHistory in pushMessage), backward paging would
-			// otherwise grow it without limit. Trimming only affects what
-			// stays cached - scrolling past the evicted point re-fetches.
-			const maxBuffered = 3 * batchSize;
-
-			if (chan.messages.length > maxBuffered) {
-				const evicted = chan.messages.splice(0, chan.messages.length - maxBuffered);
-				chan.dereferencePreviews(evicted);
-			}
-
 			return {
 				chan: chan.id,
 				messages: messages,
@@ -875,15 +869,36 @@ class Client {
 		}
 	}
 
-	search(query: SearchQuery): SearchResponse {
+	async search(query: SearchQuery): Promise<SearchResponse> {
 		if (!this.messageProvider?.isEnabled) {
 			return {
 				...query,
 				results: [],
+				hasMore: false,
 			};
 		}
 
-		return this.messageProvider.search(query);
+		if (this.searchInProgress) {
+			throw new Error("A search is already in progress");
+		}
+
+		this.searchInProgress = true;
+
+		try {
+			return await this.messageProvider.searchInWorker(query);
+		} finally {
+			this.searchInProgress = false;
+		}
+	}
+
+	flushMessageStorage(): void {
+		for (const storage of this.messageStorage) {
+			const flushable = storage as {flushBatch?: () => void};
+
+			if (typeof flushable.flushBatch === "function") {
+				flushable.flushBatch();
+			}
+		}
 	}
 
 	open(socketId: string, target: number) {
@@ -978,6 +993,7 @@ class Client {
 
 	part(network: Network, chan: Chan) {
 		const client = this;
+		client.massEventAggregator.cleanup(chan.id);
 
 		if (chan.type === ChanType.QUERY) {
 			network.removeMonitor(chan.name);
@@ -993,6 +1009,7 @@ class Client {
 	}
 
 	quit(signOut?: boolean) {
+		let storageClosedCleanly = true;
 		const sockets = this.manager.sockets.sockets;
 		const room = sockets.adapter.rooms.get(this.id);
 
@@ -1011,6 +1028,10 @@ class Client {
 		}
 
 		this.networks.forEach((network) => {
+			for (const channel of network.channels) {
+				this.massEventAggregator.cleanup(channel.id);
+			}
+
 			network.quit();
 			network.destroy();
 		});
@@ -1019,9 +1040,12 @@ class Client {
 			try {
 				messageStorage.close();
 			} catch (e: any) {
+				storageClosedCleanly = false;
 				log.error(e);
 			}
 		}
+
+		return storageClosedCleanly;
 	}
 
 	clientAttach(socketId: string, token: string) {
@@ -1062,11 +1086,14 @@ class Client {
 		if (
 			!_.isPlainObject(subscription) ||
 			typeof subscription.endpoint !== "string" ||
-			!/^https?:\/\//.test(subscription.endpoint) ||
+			!/^https:\/\//.test(subscription.endpoint) ||
+			subscription.endpoint.length > 4096 ||
 			!_.isPlainObject(subscription.keys) ||
 			!subscription.keys || // TS compiler doesn't understand isPlainObject
 			typeof subscription.keys.p256dh !== "string" ||
-			typeof subscription.keys.auth !== "string"
+			subscription.keys.p256dh.length > 256 ||
+			typeof subscription.keys.auth !== "string" ||
+			subscription.keys.auth.length > 256
 		) {
 			session.pushSubscription = null;
 			return;

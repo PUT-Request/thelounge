@@ -1,6 +1,7 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
-import {expect} from "vitest";
+import {expect, vi} from "vitest";
 import util from "../util";
 import Msg from "../../server/models/msg";
 import {MessageType} from "../../shared/types/msg";
@@ -250,6 +251,26 @@ describe("SQLite unit tests", function () {
 		expect(search.results[0].storageId).to.equal(2);
 	});
 
+	it("does not publish a storage id before COMMIT succeeds", function () {
+		const message = new Msg({time: 1000, text: "commit guarded"} as any);
+		store.index({uuid: "commit-test"} as any, {name: "#channel"} as any, message);
+		const originalExec = store.database.exec.bind(store.database);
+		const exec = vi.spyOn(store.database, "exec").mockImplementation((sql: string) => {
+			if (sql === "COMMIT") {
+				throw new Error("simulated commit failure");
+			}
+
+			return originalExec(sql);
+		});
+
+		expect(() => store.flushBatch()).to.throw("simulated commit failure");
+		expect(message.storageId).to.be.undefined;
+		exec.mockRestore();
+
+		store.flushBatch();
+		expect(message.storageId).to.equal(1);
+	});
+
 	it("loads a window around a storage id", function () {
 		const net = {uuid: "window-test-network"} as any;
 		const chan = {name: "#channel"} as any;
@@ -346,6 +367,34 @@ describe("SQLite FTS sidecar", function () {
 			}
 		).c;
 	}
+
+	it("runs production searches in an isolated worker", async function () {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "thelounge-search-worker-"));
+		const workerStore = new MessageStorage("worker-test");
+
+		try {
+			workerStore._enable(path.join(directory, "worker-test.sqlite3"));
+			workerStore.index(
+				{uuid: "worker-network"} as any,
+				{name: "#worker"} as any,
+				new Msg({time: 123456789, text: "worker isolated result"} as any)
+			);
+
+			const result = await workerStore.searchInWorker({
+				searchTerm: "isolated",
+				networkUuid: "worker-network",
+				channelName: "#worker",
+				offset: 0,
+			});
+
+			expect(result.results.map((message) => message.text)).to.deep.equal([
+				"worker isolated result",
+			]);
+		} finally {
+			workerStore.close();
+			fs.rmSync(directory, {recursive: true, force: true});
+		}
+	});
 
 	it("computes append vs rebuild sync plans", function () {
 		// Empty/fresh database: nothing to do, append from the start
@@ -552,6 +601,9 @@ describe("SQLite FTS sidecar", function () {
 
 		const dir = path.join(Config.getHomePath(), "logs", "backup-test-tmp");
 		const {main, sidecar} = store.backupTo(dir);
+		expect(() => store.backupTo(dir)).to.throw(
+			"Backup destination already contains files for this user"
+		);
 
 		expect(fs.existsSync(main)).to.be.true;
 		expect(fs.existsSync(sidecar)).to.be.true;
@@ -611,6 +663,9 @@ describe("SQLite Message Storage", function () {
 
 		store.enable();
 		expect(store.isEnabled).to.be.true;
+		expect(() => store.backupTo(Config.getUserLogsPath())).to.throw(
+			"Backup destination must not be the active message-storage directory"
+		);
 	});
 
 	it("should resolve an empty array when disabled", function () {
@@ -721,6 +776,7 @@ describe("SQLite Message Storage", function () {
 				offset: 0,
 			});
 			expect(search.results).to.have.lengthOf(100);
+			expect(search.hasMore).to.be.true;
 			const expectedMessages: string[] = [];
 
 			for (let i = 100; i < 200; ++i) {

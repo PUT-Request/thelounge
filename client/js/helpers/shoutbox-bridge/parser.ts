@@ -21,7 +21,11 @@ export function parser(originalMessage: SharedMsg) {
 
 	const originalSender = originalMessage.from?.nick?.toLowerCase();
 
-	if (!originalMessage.text || !originalSender) {
+	// Bridge formatting changes the apparent sender. Only accept that stronger
+	// presentation when the IRC server identified the source with IRCv3 bot
+	// mode/tag metadata; a matching nickname and message pattern are not an
+	// authentication boundary.
+	if (!originalMessage.text || !originalSender || originalMessage.from?.isBot !== true) {
 		return originalMessage;
 	}
 

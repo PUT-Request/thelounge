@@ -35,7 +35,9 @@ socket.on("more", async (data) => {
 	const maxBuffered = 3 * batchSize;
 
 	if (channel.messages.length > maxBuffered) {
-		channel.messages.splice(0, channel.messages.length - maxBuffered);
+		// This is a backwards page: preserve the newly prepended oldest rows and
+		// evict from the newest end. Forward paging performs the opposite trim.
+		channel.messages.splice(maxBuffered);
 	}
 
 	await nextTick();

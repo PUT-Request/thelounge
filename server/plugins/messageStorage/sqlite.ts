@@ -1,8 +1,9 @@
 import {DatabaseSync} from "node:sqlite";
+import {Worker} from "node:worker_threads";
 
 import log from "../../log";
 import path from "path";
-import {mkdirSync, statSync, unlinkSync} from "fs";
+import {existsSync, mkdirSync, renameSync, statSync, unlinkSync} from "fs";
 import Config from "../../config";
 import Msg, {Message} from "../../models/msg";
 import Chan, {Channel} from "../../models/chan";
@@ -280,7 +281,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		return path.join(dir, `${base}.fts.sqlite3`);
 	}
 
-	_enable(connection_string: string) {
+	_enable(connection_string: string, reconcile = true) {
 		this.database = new DatabaseSync(connection_string);
 		this.mainPath = connection_string;
 
@@ -294,7 +295,10 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 
 			this.ensureSidecarSchema();
 			this.run_migrations();
-			this.reconcileSidecar();
+
+			if (reconcile) {
+				this.reconcileSidecar();
+			}
 
 			// Prepare insert statements for batching
 			this.insertStmt = this.database.prepare(
@@ -311,11 +315,11 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		this.isEnabled = true;
 	}
 
-	enable() {
+	enable(reconcile = true) {
 		const logsPath = Config.getUserLogsPath();
 		const sqlitePath = path.join(logsPath, `${this.userName}.sqlite3`);
 		mkdirSync(logsPath, {recursive: true});
-		this._enable(sqlitePath);
+		this._enable(sqlitePath, reconcile);
 	}
 
 	setup_new_db() {
@@ -511,6 +515,7 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		}
 
 		const messages = this.batchQueue.splice(0); // Take all messages and clear queue
+		const assigned: Array<{source: Msg; rowid: number}> = [];
 
 		this.database.exec("BEGIN");
 
@@ -526,24 +531,32 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 				) as unknown as {lastInsertRowid: number | bigint};
 				const rowid = Number(info.lastInsertRowid);
 
-				// Stamp the live object with its stable row id, so jumps by
-				// storageId work for messages that arrived after the last
-				// read (mentions and notifications hold the same reference).
-				msg.source.storageId = rowid;
+				assigned.push({source: msg.source, rowid});
 
 				if (msg.type === (MessageType.MESSAGE as string)) {
 					this.ftsInsertStmt.run(rowid, msg.text);
 				}
 			}
+
+			this.database.exec("COMMIT");
 		} catch (err) {
-			this.database.exec("ROLLBACK");
+			try {
+				this.database.exec("ROLLBACK");
+			} catch {
+				// COMMIT may already have ended the transaction. Preserve the
+				// original error and retry the queue on the next flush.
+			}
+
 			// Re-add messages to queue on failure (concat, not spread -
 			// the batch is unbounded between timer flushes)
 			this.batchQueue = messages.concat(this.batchQueue);
 			throw err;
 		}
 
-		this.database.exec("COMMIT");
+		// Publish stable IDs only after the main row and FTS row are durable.
+		for (const {source, rowid} of assigned) {
+			source.storageId = rowid;
+		}
 	}
 
 	// Schedule a batch flush after the timeout, fire-and-forget: errors are
@@ -686,29 +699,98 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		};
 	}
 
-	// Write consistent snapshots of both files into dir (created if needed).
-	// VACUUM INTO copies a transactionally consistent image without blocking
-	// longer than the copy takes, and works while the server keeps running.
+	// Snapshot the authoritative main database, then construct a matching FTS
+	// sidecar from that frozen snapshot. The two output files therefore cannot
+	// represent different points in time even if the live server keeps writing.
 	backupTo(dir: string): {main: string; sidecar: string} {
 		this.flushBatch();
-		mkdirSync(dir, {recursive: true});
+		const destination = path.resolve(dir);
+		const main = path.join(destination, `${this.userName}.sqlite3`);
+		const sidecar = path.join(destination, `${this.userName}.fts.sqlite3`);
+		const sourcePaths = [this.mainPath, this.sidecarPath]
+			.filter((value): value is string => Boolean(value) && value !== ":memory:")
+			.map((value) => path.resolve(value));
 
-		const main = path.join(dir, `${this.userName}.sqlite3`);
-		const sidecar = path.join(dir, `${this.userName}.fts.sqlite3`);
-
-		// VACUUM INTO refuses to overwrite, so clear previous backups first.
-		for (const target of [main, sidecar]) {
-			try {
-				unlinkSync(target);
-			} catch {
-				// Missing file - nothing to clear.
-			}
+		if ([main, sidecar].some((target) => sourcePaths.includes(path.resolve(target)))) {
+			throw new Error("Backup destination must not be the active message-storage directory");
 		}
 
-		this.database.exec(`VACUUM INTO '${main.replace(/'/g, "''")}'`);
-		this.database.exec(`VACUUM fts INTO '${sidecar.replace(/'/g, "''")}'`);
+		if (existsSync(main) || existsSync(sidecar)) {
+			throw new Error("Backup destination already contains files for this user");
+		}
 
-		return {main, sidecar};
+		mkdirSync(destination, {recursive: true});
+		const suffix = `.tmp-${process.pid}-${Date.now()}`;
+		const mainTemp = `${main}${suffix}`;
+		const sidecarTemp = `${sidecar}${suffix}`;
+		let publishedMain = false;
+
+		try {
+			this.database.exec(`VACUUM INTO '${mainTemp.replace(/'/g, "''")}'`);
+
+			const snapshot = new DatabaseSync(mainTemp);
+
+			try {
+				snapshot.prepare("ATTACH DATABASE ? AS fts").run(sidecarTemp);
+				snapshot.exec(ftsSchema.join(";"));
+				snapshot
+					.prepare(
+						"INSERT INTO fts.fts_options (name, value) VALUES ('fts_ext_version', ?)"
+					)
+					.run(ftsCurrentVersion.toString());
+				snapshot.exec(
+					"INSERT INTO fts.messages_fts(rowid, text) SELECT id, json_extract(msg, '$.text') FROM messages WHERE type = 'message'"
+				);
+
+				const integrity = snapshot.prepare("PRAGMA integrity_check").get() as {
+					integrity_check?: string;
+				};
+
+				if (integrity.integrity_check !== "ok") {
+					throw new Error("Main backup failed SQLite integrity_check");
+				}
+
+				const sourceCount = (
+					snapshot
+						.prepare("SELECT COUNT(*) AS count FROM messages WHERE type = 'message'")
+						.get() as {count: number}
+				).count;
+				const indexCount = (
+					snapshot.prepare("SELECT COUNT(*) AS count FROM fts.messages_fts").get() as {
+						count: number;
+					}
+				).count;
+
+				if (sourceCount !== indexCount) {
+					throw new Error("Backup search index does not match the message snapshot");
+				}
+			} finally {
+				snapshot.close();
+			}
+
+			renameSync(mainTemp, main);
+			publishedMain = true;
+			renameSync(sidecarTemp, sidecar);
+			return {main, sidecar};
+		} catch (error) {
+			for (const temporary of [mainTemp, sidecarTemp]) {
+				try {
+					unlinkSync(temporary);
+				} catch {
+					// Nothing left to clean up.
+				}
+			}
+
+			if (publishedMain) {
+				try {
+					unlinkSync(main);
+				} catch {
+					// The output was never published or has already been removed.
+				}
+			}
+
+			throw error;
+		}
 	}
 
 	close() {
@@ -716,19 +798,9 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 			return;
 		}
 
-		// Flush any pending batched messages. Must not throw: close() runs
-		// on shutdown paths that used to be infallible, and a half-closed
-		// store (connection left open, isEnabled still true) is worse than
-		// losing the unflushed tail to a logged error.
-		try {
-			this.flushBatch();
-		} catch (err) {
-			log.error(
-				`Failed to flush message batch on close: ${
-					err instanceof Error ? err.message : String(err)
-				}`
-			);
-		}
+		// A failed final flush must abort shutdown of this store. Closing the
+		// handle would make the still-queued tail unrecoverable.
+		this.flushBatch();
 
 		// Clear batch timer
 		if (this.batchTimer) {
@@ -1096,16 +1168,88 @@ class SqliteMessageStorage implements SearchableMessageStorage {
 		const maxResults = 100;
 
 		select += " ORDER BY m.time DESC, m.id DESC LIMIT ? OFFSET ? ";
-		params.push(maxResults);
+		params.push(maxResults + 1);
 		params.push(query.offset);
 
 		const rows = this.timedAll("search", select, ...params) as StoredRow[];
+		const hasMore = rows.length > maxResults;
+		const page = rows.slice(0, maxResults);
 		let id = query.offset;
 
 		return {
 			...query,
-			results: rows.map((row) => parseStoredRow(row, () => id++)).reverse(),
+			results: page.map((row) => parseStoredRow(row, () => id++)).reverse(),
+			hasMore,
 		};
+	}
+
+	async searchInWorker(query: SearchQuery, timeoutMs = 10_000): Promise<SearchResponse> {
+		if (!this.isEnabled || !this.mainPath || !this.sidecarPath) {
+			throw new Error("SQLite search is not available");
+		}
+
+		// Preserve read-after-write behavior without allowing the potentially
+		// expensive query itself to monopolize the IRC/WebSocket event loop.
+		this.flushBatch();
+
+		const compiledWorker = path.join(__dirname, "..", "..", "workers", "sqlite-search.js");
+		const workerPath = existsSync(compiledWorker)
+			? compiledWorker
+			: path.join(__dirname, "..", "..", "workers", "sqlite-search.ts");
+
+		return new Promise<SearchResponse>((resolve, reject) => {
+			const worker = new Worker(workerPath, {
+				execArgv: workerPath.endsWith(".ts") ? ["--import", "tsx"] : undefined,
+				workerData: {
+					mainPath: this.mainPath,
+					sidecarPath: this.sidecarPath,
+					query,
+				},
+			});
+			let settled = false;
+			const timeout = setTimeout(() => {
+				if (settled) {
+					return;
+				}
+
+				settled = true;
+				void worker.terminate();
+				reject(new Error("SQLite search timed out"));
+			}, timeoutMs);
+
+			const finish = (callback: () => void) => {
+				if (settled) {
+					return;
+				}
+
+				settled = true;
+				clearTimeout(timeout);
+				callback();
+			};
+
+			timeout.unref();
+			worker.once("message", (message: {result?: SearchResponse; error?: string}) => {
+				finish(() => {
+					if (message.result) {
+						resolve(message.result);
+					} else {
+						reject(new Error(message.error ?? "SQLite search worker failed"));
+					}
+				});
+			});
+			worker.once("error", (error: unknown) =>
+				finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+			);
+			worker.once("exit", (code) => {
+				if (code !== 0) {
+					finish(() =>
+						reject(new Error(`SQLite search worker exited with code ${code}`))
+					);
+				} else {
+					finish(() => reject(new Error("SQLite search worker returned no result")));
+				}
+			});
+		});
 	}
 
 	// Get a window of messages around a stored row id (for jumping to a

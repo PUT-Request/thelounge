@@ -8,6 +8,8 @@ import User from "../../models/user";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
 import {MessageEventArgs} from "irc-framework";
+import Config from "../../config";
+import log from "../../log";
 
 const nickRegExp = /(?:\x03[0-9]{1,2}(?:,[0-9]{1,2})?)?([\p{Letter}\p{Number}_[\]\\`^{|}-]+)/gu;
 
@@ -75,7 +77,7 @@ export default <IrcEventHandler>function (irc, network) {
 		let from: User;
 		let highlight = false;
 		let showInActive = false;
-		const self = data.nick === irc.user.nick;
+		const self = network.casefold(data.nick) === network.casefold(irc.user.nick);
 
 		// Some servers send messages without any nickname
 		if (!data.nick) {
@@ -127,13 +129,13 @@ export default <IrcEventHandler>function (irc, network) {
 			let target = data.target;
 
 			// If the message is targeted at us, use sender as target instead
-			if (target.toLowerCase() === irc.user.nick.toLowerCase()) {
+			if (network.casefold(target) === network.casefold(irc.user.nick)) {
 				target = data.nick;
 			}
 
 			// +channel-context: route private messages to the specified channel
 			// https://ircv3.net/specs/client-tags/channel-context
-			if (data.channelContext && target === data.nick) {
+			if (data.channelContext && network.casefold(target) === network.casefold(data.nick)) {
 				const contextChan = network.getChannel(data.channelContext);
 
 				if (contextChan && contextChan.type === ChanType.CHANNEL) {
@@ -235,7 +237,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 		// Members of a user-initiated BEFORE fetch accumulate server-side
 		// and are delivered as one prepend; anything else flows normally.
-		if (isPlayback && collectPlaybackMessage(network, chan, msg)) {
+		if (isPlayback && collectPlaybackMessage(network, chan, msg, data.batch?.id)) {
 			return;
 		}
 
@@ -279,6 +281,21 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		chan.pushMessage(client, msg, !msg.self && !isPlayback);
+
+		// Notification and mention payloads copy storageId rather than retaining
+		// the message object. Make highlighted messages durable before those
+		// payloads are constructed so their jump target survives a restart.
+		if (!isPlayback && msg.highlight && !Config.values.public) {
+			try {
+				client.flushMessageStorage();
+			} catch (error: unknown) {
+				log.error(
+					`Failed to persist highlighted message: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
+			}
+		}
 
 		// Do not send notifications if the channel is muted or for messages older than 15 minutes (znc buffer for example).
 		// Playback never notifies.

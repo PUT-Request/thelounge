@@ -7,9 +7,17 @@ import log from "../log";
 import contentDisposition from "content-disposition";
 import mimeTypes from "mime-types";
 import type {Socket} from "socket.io";
-import {Request, Response} from "express";
+import type {Request, Response as ExpressResponse} from "express";
 import NodeBuffer, {Buffer} from "buffer";
 import {UploadProviders, UploadProvider} from "../../shared/upload-providers";
+import {Agent, fetch as undiciFetch} from "undici";
+import {resolvePublicHostname} from "../publicNetwork";
+
+type UploadAuthorization = {
+	timeout: ReturnType<typeof setTimeout>;
+	service: string;
+	ownerTokens: Set<string>;
+};
 
 // Map of mime types to their more common aliases
 const mimeAliases: {[key: string]: string} = {
@@ -43,22 +51,43 @@ const inlineContentDispositionTypes = {
 	"video/webm": "video.webm",
 };
 
-const uploadTokens = new Map();
+const uploadTokens = new Map<string, UploadAuthorization>();
+
+const MAX_OUTSTANDING_TOKENS_PER_SOCKET = 5;
+const MAX_CONCURRENT_EXTERNAL_RELAYS = 4;
+const MAX_EXTERNAL_RELAY_SIZE = 50 * 1024 * 1024;
+const PROVIDER_REQUEST_TIMEOUT = 30 * 1000;
+const MAX_PROVIDER_TOKEN_LENGTH = 4096;
+const MAX_PROVIDER_URL_LENGTH = 2048;
+let activeExternalRelays = 0;
 
 const EXPIRY_SUFFIX = ".expires";
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
 class Uploader {
 	constructor(socket: Socket) {
-		socket.on("upload:auth", () => {
-			const token = crypto.randomUUID();
+		const socketTokens = new Set<string>();
 
-			socket.emit("upload:auth", token);
+		socket.on("upload:auth", (data) => {
+			if (socketTokens.size >= MAX_OUTSTANDING_TOKENS_PER_SOCKET) {
+				return;
+			}
+
+			const requestedService = typeof data?.service === "string" ? data.service : "new";
+			const service =
+				Config.values.allowFileUploadBackendSelection &&
+				UploadProviders.some((provider) => provider.id === requestedService)
+					? requestedService
+					: "new";
+			const token = crypto.randomUUID();
+			socketTokens.add(token);
 
 			// Invalidate the token in one minute
-			const timeout = Uploader.createTokenTimeout(token);
+			const timeout = Uploader.createTokenTimeout(token, socketTokens);
 
-			uploadTokens.set(token, timeout);
+			uploadTokens.set(token, {timeout, service, ownerTokens: socketTokens});
+
+			socket.emit("upload:auth", token);
 		});
 
 		socket.on("upload:ping", (token) => {
@@ -66,20 +95,43 @@ class Uploader {
 				return;
 			}
 
-			let timeout = uploadTokens.get(token);
+			const authorization = uploadTokens.get(token);
 
-			if (!timeout) {
+			if (!authorization || authorization.ownerTokens !== socketTokens) {
 				return;
 			}
 
-			clearTimeout(timeout);
-			timeout = Uploader.createTokenTimeout(token);
-			uploadTokens.set(token, timeout);
+			clearTimeout(authorization.timeout);
+			authorization.timeout = Uploader.createTokenTimeout(token, socketTokens);
+		});
+
+		socket.once("disconnect", () => {
+			for (const token of socketTokens) {
+				Uploader.consumeAuthorization(token);
+			}
 		});
 	}
 
-	static createTokenTimeout(this: void, token: string) {
-		return setTimeout(() => uploadTokens.delete(token), 60 * 1000);
+	static createTokenTimeout(this: void, token: string, ownerTokens: Set<string>) {
+		const timeout = setTimeout(() => {
+			uploadTokens.delete(token);
+			ownerTokens.delete(token);
+		}, 60 * 1000);
+		timeout.unref();
+		return timeout;
+	}
+
+	static consumeAuthorization(this: void, token: string) {
+		const authorization = uploadTokens.get(token);
+
+		if (!authorization) {
+			return undefined;
+		}
+
+		clearTimeout(authorization.timeout);
+		authorization.ownerTokens.delete(token);
+		uploadTokens.delete(token);
+		return authorization;
 	}
 
 	// TODO: type
@@ -95,7 +147,7 @@ class Uploader {
 		express.post("/uploads/:service/:token/:ttl", Uploader.routeUploadFile);
 	}
 
-	static async routeGetFile(this: void, req: Request, res: Response) {
+	static async routeGetFile(this: void, req: Request, res: ExpressResponse) {
 		// Express 5 types params as string | string[] (segments can repeat);
 		// normalize back to a single value. A joined multi-segment `name`
 		// can never match the hex regex below, so this stays a 404.
@@ -149,20 +201,32 @@ class Uploader {
 		return res.sendFile(filePath);
 	}
 
-	static routeUploadFile(this: void, req: Request, res: Response) {
-		let busboyInstance: busboy | null | undefined;
-		let uploadUrl: string | URL;
+	static routeUploadFile(this: void, req: Request, res: ExpressResponse) {
+		let busboyInstance: busboy | null = null;
+		let uploadUrl: string | URL | undefined;
 		let randomName: string;
 		let originalFilename = "";
 		let destDir: fs.PathLike;
-		let destPath: fs.PathLike | null;
-		let streamWriter: fs.WriteStream | null;
+		let destPath: fs.PathLike | null = null;
+		let streamWriter: fs.WriteStream | null = null;
+		let receivedFile = false;
+		let providerToken = "";
+		let providerUrl = "";
+		let relaySlotHeld = false;
+		let settled = false;
 
 		// `/uploads/new/:token` (legacy local) vs `/uploads/:service/:token/:ttl?`
 		const service: string = (req.params as any).service ?? "new";
 		const token: string = (req.params as any).token;
 		const ttl: string = (req.params as any).ttl ?? "";
 		const uploadProvider = UploadProviders.find((b) => b.id === service);
+
+		const releaseRelaySlot = () => {
+			if (relaySlotHeld) {
+				activeExternalRelays--;
+				relaySlotHeld = false;
+			}
+		};
 
 		const doneCallback = () => {
 			// detach the stream and drain any remaining data
@@ -181,31 +245,67 @@ class Uploader {
 			}
 		};
 
-		const abortWithError = (err: any) => {
-			doneCallback();
-
-			// if we ended up erroring out, delete the output file from disk
-			if (destPath && fs.existsSync(destPath)) {
-				fs.unlinkSync(destPath);
-				destPath = null;
+		const removeDestination = () => {
+			if (!destPath) {
+				return;
 			}
 
-			return res.status(400).json({error: err.message});
+			try {
+				fs.unlinkSync(destPath);
+			} catch (error: any) {
+				if (error?.code !== "ENOENT") {
+					log.warn(`Failed to remove incomplete upload ${String(destPath)}: ${error}`);
+				}
+			}
+
+			destPath = null;
 		};
+
+		const abortWithError = (err: any, status = 400) => {
+			if (settled) {
+				return res;
+			}
+
+			settled = true;
+			doneCallback();
+			releaseRelaySlot();
+			removeDestination();
+
+			return res.status(status).json({
+				error: err instanceof Error ? err.message : "Upload failed",
+			});
+		};
+
+		req.once("aborted", () => {
+			if (!settled) {
+				settled = true;
+				doneCallback();
+				releaseRelaySlot();
+				removeDestination();
+			}
+		});
+		req.setTimeout(2 * 60 * 1000, () => req.destroy(new Error("Upload request timed out")));
 
 		// if the authentication token is incorrect, bail out
 		if (!uploadProvider) {
 			return abortWithError(Error("Invalid upload provider"));
 		}
 
-		if (uploadProvider.requiresToken && token === `_${uploadProvider.id}_`) {
-			return abortWithError(Error("Missing API Key"));
+		const authorization = uploadTokens.get(token);
+
+		if (!authorization || authorization.service !== service) {
+			return abortWithError(Error("Invalid upload token"), 401);
 		}
 
-		if (uploadProvider.id === "new") {
-			if (uploadTokens.delete(token) !== true) {
-				return abortWithError(Error("Invalid upload token"));
+		Uploader.consumeAuthorization(token);
+
+		if (service !== "new") {
+			if (activeExternalRelays >= MAX_CONCURRENT_EXTERNAL_RELAYS) {
+				return abortWithError(Error("Too many external uploads in progress"), 429);
 			}
+
+			activeExternalRelays++;
+			relaySlotHeld = true;
 		}
 
 		// if the request does not contain any body data, bail out
@@ -228,7 +328,10 @@ class Uploader {
 				headers: req.headers as BusboyHeaders,
 				limits: {
 					files: 1, // only allow one file per upload
-					fileSize: Uploader.getMaxFileSize(),
+					fields: 2,
+					parts: 3,
+					fieldSize: Math.max(MAX_PROVIDER_TOKEN_LENGTH, MAX_PROVIDER_URL_LENGTH),
+					fileSize: Uploader.getMaxFileSize(service),
 				},
 			});
 		} catch (err) {
@@ -240,6 +343,13 @@ class Uploader {
 		busboyInstance.on("partsLimit", () => abortWithError(Error("Parts limit reached")));
 		busboyInstance.on("filesLimit", () => abortWithError(Error("Files limit reached")));
 		busboyInstance.on("fieldsLimit", () => abortWithError(Error("Fields limit reached")));
+		busboyInstance.on("field", (name: string, value: string) => {
+			if (name === "providerToken") {
+				providerToken = value;
+			} else if (name === "providerUrl") {
+				providerUrl = value;
+			}
+		});
 
 		// generate a random output filename for the file
 		// we use do/while loop to prevent the rare case of generating a file name
@@ -250,36 +360,32 @@ class Uploader {
 			destPath = path.join(destDir, randomName);
 		} while (fs.existsSync(destPath));
 
-		// we split the filename into subdirectories (by taking 2 letters from the beginning)
-		// this helps avoid file system and certain tooling limitations when there are
-		// too many files on one folder
-		try {
-			fs.mkdirSync(destDir, {recursive: true});
-		} catch (err: any) {
-			log.error(`Error ensuring ${destDir} exists for uploads: ${err.message}`);
-
-			return abortWithError(err);
-		}
-
-		// Open a file stream for writing
-		streamWriter = fs.createWriteStream(destPath);
-		streamWriter.on("error", abortWithError);
-
 		busboyInstance.on(
 			"file",
 			(
 				fieldname: any,
 				fileStream: {
-					on: (
-						arg0: string,
-						arg1: {(err: any): Response<any, Record<string, any>>; (): void}
-					) => void;
+					on: (arg0: string, arg1: {(err: any): ExpressResponse; (): void}) => void;
 					unpipe: (arg0: any) => void;
 					read: {bind: (arg0: any) => any};
 					pipe: (arg0: any) => void;
 				},
 				filename: string | number | boolean
 			) => {
+				receivedFile = true;
+
+				// Split filenames into subdirectories, but do not create anything
+				// until Busboy has actually produced a file part.
+				try {
+					fs.mkdirSync(destDir, {recursive: true});
+				} catch (err: any) {
+					log.error(`Error ensuring ${destDir} exists for uploads: ${err.message}`);
+					abortWithError(err);
+					return;
+				}
+
+				streamWriter = fs.createWriteStream(destPath as string);
+				streamWriter.on("error", abortWithError);
 				uploadUrl = `${randomName}/${encodeURIComponent(filename)}`;
 				originalFilename = String(filename);
 
@@ -306,66 +412,88 @@ class Uploader {
 		);
 
 		busboyInstance.on("finish", () => {
+			if (settled) {
+				return;
+			}
+
+			if (!receivedFile) {
+				return abortWithError(Error("Missing file"));
+			}
+
 			if (service !== "new" && uploadProvider) {
 				// service upload: relay the temp file to the remote provider
 				const provider = uploadProvider;
 
-				const relay = () => {
+				const relay = async () => {
 					let file: File;
+					let requestUrl: string | undefined;
+					let dispatcher: Agent | undefined;
 
 					try {
-						const data = fs.readFileSync(destPath as string);
+						if (
+							providerToken.length > MAX_PROVIDER_TOKEN_LENGTH ||
+							providerUrl.length > MAX_PROVIDER_URL_LENGTH
+						) {
+							throw new Error("Upload provider credentials are too long");
+						}
+
+						if (provider.requiresToken && !providerToken) {
+							throw new Error("Missing upload provider API key");
+						}
+
+						if (provider.requiresURL) {
+							requestUrl =
+								await Uploader.validateExternalUploadDestination(providerUrl);
+							dispatcher = Uploader.createPublicDispatcher();
+						}
+
+						const data = await fs.promises.readFile(destPath as string);
 						const type =
 							(mimeTypes.lookup(originalFilename) as string) ||
 							"application/octet-stream";
 						file = new File([new Blob([new Uint8Array(data)])], originalFilename, {
 							type,
 						});
+
+						const signal = AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT);
+						const fetcher: typeof fetch | undefined = dispatcher
+							? async (input: RequestInfo | URL, init?: RequestInit) =>
+									(await undiciFetch(
+										input as any,
+										{
+											...init,
+											dispatcher,
+										} as any
+									)) as unknown as Response
+							: undefined;
+						const url = await provider.upload(
+							file,
+							ttl,
+							providerToken,
+							signal,
+							requestUrl,
+							fetcher
+						);
+
+						if (settled) {
+							return;
+						}
+
+						settled = true;
+						releaseRelaySlot();
+						fs.unlink(destPath as string, () => undefined);
+						res.status(200).json({url});
 					} catch (err: any) {
-						return abortWithError(err);
+						abortWithError(err);
+					} finally {
+						await dispatcher?.close().catch(() => undefined);
 					}
-
-					provider
-						.upload(file, ttl, token)
-						.then((url) => {
-							try {
-								fs.unlink(destPath as string, () => undefined);
-							} catch {
-								// ignore
-							}
-
-							let finalUrl: string | URL = url;
-
-							// Allow host masking for vanity URL for externally hosted files
-							if (
-								Config.values.maskFileHost &&
-								Config.values.fileUpload.baseUrl !== null &&
-								Config.values.fileUpload.baseUrl !== undefined
-							) {
-								try {
-									const oldHost = new URL(url).host;
-									const newHost = new URL(Config.values.fileUpload.baseUrl).host;
-									finalUrl = url.replace(oldHost, newHost);
-								} catch {
-									finalUrl = url;
-								}
-							}
-
-							if (!finalUrl) {
-								return res.status(400).json({error: "Missing file"});
-							}
-
-							return res.status(200).json({url: finalUrl});
-						})
-						.catch((err) => {
-							abortWithError(err);
-						});
 				};
 
 				if (!streamWriter || (streamWriter as any).closed === true) {
-					relay();
+					void relay();
 				} else {
-					streamWriter?.once("finish", relay);
+					streamWriter?.once("finish", () => void relay());
 				}
 
 				doneCallback();
@@ -375,12 +503,13 @@ class Uploader {
 			doneCallback();
 
 			if (!uploadUrl) {
-				return res.status(400).json({error: "Missing file"});
+				return abortWithError(Error("Missing file"));
 			}
 
 			Uploader.writeExpiry(destPath as string, uploadProvider, ttl);
 
 			// upload was done, send the generated file url to the client
+			settled = true;
 			res.status(200).json({
 				url: uploadUrl,
 			});
@@ -423,12 +552,12 @@ class Uploader {
 	}
 
 	// Scans the upload folder for expired local uploads and removes them
-	static pruneExpiredUploads(this: void) {
+	static async pruneExpiredUploads(this: void) {
 		const uploadPath = Config.getFileUploadPath();
 		let subDirs: string[];
 
 		try {
-			subDirs = fs.readdirSync(uploadPath);
+			subDirs = await fs.promises.readdir(uploadPath);
 		} catch {
 			return;
 		}
@@ -440,7 +569,7 @@ class Uploader {
 			let entries: string[];
 
 			try {
-				entries = fs.readdirSync(dirPath);
+				entries = await fs.promises.readdir(dirPath);
 			} catch {
 				continue;
 			}
@@ -456,7 +585,7 @@ class Uploader {
 				let expiresAt: number;
 
 				try {
-					expiresAt = parseInt(fs.readFileSync(expiryPath, "utf8"), 10);
+					expiresAt = parseInt(await fs.promises.readFile(expiryPath, "utf8"), 10);
 				} catch {
 					continue;
 				}
@@ -465,15 +594,17 @@ class Uploader {
 					continue;
 				}
 
-				fs.rmSync(filePath, {force: true});
-				fs.rmSync(expiryPath, {force: true});
+				await Promise.all([
+					fs.promises.rm(filePath, {force: true}),
+					fs.promises.rm(expiryPath, {force: true}),
+				]);
 
 				log.info(`Removed expired upload: ${filePath}`);
 			}
 
 			try {
-				if (fs.readdirSync(dirPath).length === 0) {
-					fs.rmdirSync(dirPath);
+				if ((await fs.promises.readdir(dirPath)).length === 0) {
+					await fs.promises.rmdir(dirPath);
 				}
 			} catch {
 				// not empty, or already removed - ignore
@@ -483,20 +614,65 @@ class Uploader {
 
 	// Starts the periodic sweep that removes local uploads past their TTL
 	static startExpiryCleanup(this: void) {
-		Uploader.pruneExpiredUploads();
-		setInterval(Uploader.pruneExpiredUploads, CLEANUP_INTERVAL).unref();
+		const run = () => {
+			void Uploader.pruneExpiredUploads().catch((error: unknown) => {
+				log.warn(
+					`Failed to prune expired uploads: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
+			});
+		};
+
+		run();
+		setInterval(run, CLEANUP_INTERVAL).unref();
 	}
 
-	static getMaxFileSize() {
-		const configOption = Config.values.fileUpload.maxFileSize;
+	static async validateExternalUploadDestination(this: void, value: string) {
+		let url: URL;
 
-		// Busboy uses Infinity to allow unlimited file size
-		if (configOption < 1) {
-			return Infinity;
+		try {
+			url = new URL(value);
+		} catch {
+			throw new Error("Invalid external upload URL");
 		}
 
-		// maxFileSize is in bytes, but config option is passed in as KB
-		return configOption * 1024;
+		if (url.protocol !== "https:" || url.username || url.password) {
+			throw new Error("External upload URLs must use HTTPS without embedded credentials");
+		}
+
+		if (!Config.values.fileUpload.externalUploadOrigins.includes(url.origin)) {
+			throw new Error("External upload origin is not allowed by the server administrator");
+		}
+
+		await resolvePublicHostname(url.hostname);
+		return url.toString();
+	}
+
+	static createPublicDispatcher(this: void) {
+		return new Agent({
+			connect: {
+				lookup(hostname, _options, callback) {
+					void resolvePublicHostname(hostname)
+						.then((addresses) => {
+							const selected = addresses[0];
+							callback(null, selected.address, selected.family);
+						})
+						.catch((error: Error) => callback(error, ""));
+				},
+			},
+		});
+	}
+
+	static getMaxFileSize(service = "new") {
+		const configOption = Config.values.fileUpload.maxFileSize;
+		const configuredLimit = configOption < 1 ? Infinity : configOption * 1024;
+
+		if (service !== "new") {
+			return Math.min(configuredLimit, MAX_EXTERNAL_RELAY_SIZE);
+		}
+
+		return configuredLimit;
 	}
 
 	// Returns null if an error occurred (e.g. file not found)

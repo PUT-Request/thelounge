@@ -164,15 +164,14 @@ describe("Client", function () {
 			"older 1",
 			"older 2",
 		]);
-		// Prepended to the server-side buffer...
+		// Backward pages belong to the requesting browser's window; the
+		// canonical server buffer remains the live tail for reconnect dedupe.
 		expect(chan.messages.map((m) => m.text)).to.have.ordered.members([
-			"older 1",
-			"older 2",
 			"live 1",
 			"live 2",
 			"live 3",
 		]);
-		// ...and reported as a final page (nothing older remains)
+		// The page is reported as final (nothing older remains).
 		expect(history!.moreHistoryAvailable).to.be.false;
 	});
 
@@ -230,8 +229,8 @@ describe("Client", function () {
 
 		expect(history!.messages).to.have.lengthOf(100);
 		expect(history!.moreHistoryAvailable).to.be.true;
-		// 250 + 100 prepended, capped to 3x100
-		expect(chan.messages.length).to.equal(300);
+		// Client paging must not evict or expand the canonical live tail.
+		expect(chan.messages.length).to.equal(250);
 	});
 
 	it("should load a window around a message in historyAround()", function () {

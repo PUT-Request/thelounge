@@ -24,7 +24,7 @@ export default <IrcEventHandler>function (irc, network) {
 				type: MessageType.CHGHOST,
 				new_ident: data.ident !== data.new_ident ? data.new_ident : "",
 				new_host: data.hostname !== data.new_hostname ? data.new_hostname : "",
-				self: data.nick === irc.user.nick,
+				self: network.casefold(data.nick) === network.casefold(irc.user.nick),
 				from,
 			});
 

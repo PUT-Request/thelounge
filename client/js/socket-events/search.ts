@@ -27,9 +27,19 @@ socket.on("search:results", (response) => {
 	};
 
 	if (store.state.messageSearchResults) {
-		store.commit("addMessageSearchResults", {results: response.results, query, scrollTop: 0});
+		store.commit("addMessageSearchResults", {
+			results: response.results,
+			query,
+			scrollTop: 0,
+			hasMore: response.hasMore,
+		});
 		return;
 	}
 
-	store.commit("messageSearchResults", {results: response.results, query, scrollTop: 0});
+	store.commit("messageSearchResults", {
+		results: response.results,
+		query,
+		scrollTop: 0,
+		hasMore: response.hasMore,
+	});
 });

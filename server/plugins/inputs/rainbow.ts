@@ -5,13 +5,16 @@ import {ChanType} from "../../../shared/types/chan";
 
 const commands = ["rainbow", "rgb"];
 
-function rainbow(text: string) {
+export function rainbow(text: string) {
 	const skipChars = [" ", "\x03", "\x02", "\x1F", "\x1D", "\x0F", "\x1e", "\x11"];
 	const colorCodes = [4, 7, 8, 9, 3, 10, 11, 12, 2, 6, 13];
 	const colors = colorCodes.length;
+	const graphemes = Array.from(
+		new Intl.Segmenter(undefined, {granularity: "grapheme"}).segment(text),
+		({segment}) => segment
+	);
 
-	return text
-		.split("")
+	return graphemes
 		.map((char, index) => {
 			if (skipChars.includes(char)) {
 				return char;

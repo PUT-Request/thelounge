@@ -26,7 +26,7 @@ export default <IrcEventHandler>function (irc, network) {
 				newUser.hostname = user.hostname;
 			}
 
-			newUsers.set(user.nick.toLowerCase(), newUser);
+			newUsers.set(network.casefold(user.nick), newUser);
 		});
 
 		chan.users = newUsers;

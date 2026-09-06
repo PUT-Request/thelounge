@@ -77,6 +77,7 @@ export default defineComponent({
 
 		const username = ref(storage.get("user") || "");
 		const password = ref("");
+		let pendingRetry: (() => void) | null = null;
 
 		const onAuthFailed = () => {
 			canSubmit.value = true;
@@ -100,7 +101,28 @@ export default defineComponent({
 
 			storage.set("user", values.user);
 
-			socket.emit("auth:perform", values);
+			const authenticate = () => socket.emit("auth:perform", values);
+
+			if (store.state.authFailure === "failed" || !socket.connected) {
+				// A server-initiated Socket.IO disconnect intentionally disables
+				// automatic reconnection. Start a fresh transport and wait until the
+				// server has installed its auth handler before retrying credentials.
+				socket.disconnect();
+
+				if (pendingRetry) {
+					socket.off("auth:start", pendingRetry);
+				}
+
+				pendingRetry = () => {
+					pendingRetry = null;
+					authenticate();
+				};
+
+				socket.once("auth:start", pendingRetry);
+				socket.connect();
+			} else {
+				authenticate();
+			}
 		};
 
 		const unwatchAuthFailure = store.watch(
@@ -126,6 +148,11 @@ export default defineComponent({
 
 		onBeforeUnmount(() => {
 			socket.off("auth:failed", onAuthFailed);
+
+			if (pendingRetry) {
+				socket.off("auth:start", pendingRetry);
+			}
+
 			unwatchAuthFailure();
 		});
 

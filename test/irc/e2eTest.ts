@@ -31,7 +31,7 @@ const BASE_CAPS = [
 	"standard-replies",
 	"userhost-in-names",
 	"invite-notify",
-	"chathistory",
+	"draft/chathistory",
 ];
 
 type Stack = {
@@ -67,6 +67,7 @@ async function setupStack(offeredCaps: string[]): Promise<Stack> {
 		},
 		save() {},
 		messageStorage: [],
+		flushMessageStorage() {},
 		mentions: [],
 		highlightRegex: null,
 		manager: {webPush: {push() {}}},
@@ -172,7 +173,7 @@ describe("IRC protocol end-to-end", function () {
 			const cap = stack.network.irc.network.cap;
 
 			for (const name of [
-				"chathistory",
+				"draft/chathistory",
 				"invite-notify",
 				"userhost-in-names",
 				"echo-message",
@@ -182,7 +183,7 @@ describe("IRC protocol end-to-end", function () {
 			}
 
 			const req = await stack.server.waitForLine((line) => line.startsWith("CAP REQ"));
-			expect(req).to.contain("chathistory");
+			expect(req).to.contain("draft/chathistory");
 			expect(req).to.contain("userhost-in-names");
 		} finally {
 			await teardownStack(stack);
@@ -258,7 +259,7 @@ describe("IRC protocol end-to-end", function () {
 			const fetch = await stack.server.waitForLine((line) =>
 				line.startsWith("CHATHISTORY LATEST #test")
 			);
-			expect(fetch).to.contain("* 100");
+			expect(fetch).to.match(/^CHATHISTORY LATEST #test timestamp=\d{4}-\d{2}-\d{2}T.* 100$/);
 
 			stack.server.send("BATCH +h1 chathistory #test");
 			stack.server.send(

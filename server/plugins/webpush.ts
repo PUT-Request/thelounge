@@ -5,10 +5,87 @@ import path from "path";
 import Config from "../config";
 import Client from "../client";
 import * as os from "os";
+import https from "https";
+import {isPublicNetworkAddress, resolvePublicHostname} from "../publicNetwork";
 
 import type {PushSubscription, VapidDetails} from "web-push-neo";
 
 type WebPushNeo = typeof import("web-push-neo");
+
+const PUSH_REQUEST_TIMEOUT_MS = 10000;
+
+export async function validatePushEndpoint(endpoint: string): Promise<boolean> {
+	let url: URL;
+
+	try {
+		url = new URL(endpoint);
+	} catch {
+		return false;
+	}
+
+	if (
+		url.protocol !== "https:" ||
+		url.username !== "" ||
+		url.password !== "" ||
+		url.hostname.toLowerCase() === "localhost"
+	) {
+		return false;
+	}
+
+	try {
+		await resolvePublicHostname(url.hostname);
+	} catch {
+		return false;
+	}
+
+	return true;
+}
+
+async function sendPushRequest(
+	request: Awaited<ReturnType<WebPushNeo["generateRequestDetails"]>>
+): Promise<number> {
+	const endpoint = new URL(request.endpoint);
+
+	return new Promise<number>((resolve, reject) => {
+		const outgoing = https.request(
+			endpoint,
+			{
+				method: request.method,
+				headers: request.headers,
+				// Resolve at connection time and hand the socket layer the exact
+				// approved address. This closes the check/use DNS-rebinding gap
+				// that would remain if validation were followed by ordinary fetch().
+				lookup(hostname, _options, callback) {
+					void resolvePublicHostname(hostname)
+						.then((addresses) => {
+							if (
+								!addresses.every(({address, family}) =>
+									isPublicNetworkAddress(address, family)
+								)
+							) {
+								callback(new Error("Unsafe WebPush destination"), "");
+								return;
+							}
+
+							const selected = addresses[0];
+							callback(null, selected.address, selected.family);
+						})
+						.catch((error: Error) => callback(error, ""));
+				},
+			},
+			(response) => {
+				response.resume();
+				response.once("end", () => resolve(response.statusCode ?? 500));
+			}
+		);
+
+		outgoing.setTimeout(PUSH_REQUEST_TIMEOUT_MS, () => {
+			outgoing.destroy(new Error("WebPush request timed out"));
+		});
+		outgoing.once("error", reject);
+		outgoing.end(request.body);
+	});
+}
 
 // Prevent TypeScript from transforming import() into require() for ESM-only packages. Super ugly.
 /* eslint-disable @typescript-eslint/no-implied-eval */
@@ -135,15 +212,43 @@ class WebPush {
 	 */
 	async pushSingle(client: Client, subscription: PushSubscription, payload: any) {
 		try {
+			if (!(await validatePushEndpoint(subscription.endpoint))) {
+				log.warn(`Rejected unsafe WebPush endpoint for ${client.name}`);
+
+				_.forOwn(client.config.sessions, ({pushSubscription}, token) => {
+					if (pushSubscription?.endpoint === subscription.endpoint) {
+						client.unregisterPushSubscription(token);
+					}
+				});
+
+				return;
+			}
+
 			const webPush = await this.loadWebPush();
-			await webPush.sendNotification(subscription, JSON.stringify(payload), {
-				vapidDetails: this.vapidDetails,
-			});
-		} catch (error: any) {
-			if (error.statusCode >= 400 && error.statusCode < 500) {
+			const request = await webPush.generateRequestDetails(
+				subscription,
+				JSON.stringify(payload),
+				{
+					vapidDetails: this.vapidDetails,
+				}
+			);
+			const statusCode = await sendPushRequest(request);
+
+			if (statusCode < 200 || statusCode >= 300) {
+				throw Object.assign(new Error("WebPush endpoint returned an error"), {
+					statusCode,
+				});
+			}
+		} catch (error: unknown) {
+			const statusCode =
+				typeof error === "object" && error !== null && "statusCode" in error
+					? Number(error.statusCode)
+					: Number.NaN;
+
+			if (statusCode >= 400 && statusCode < 500) {
 				log.warn(
 					`WebPush subscription for ${client.name} returned an error (${String(
-						error.statusCode
+						statusCode
 					)}), removing subscription`
 				);
 

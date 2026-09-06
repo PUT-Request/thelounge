@@ -10,6 +10,7 @@ import Prefix from "../../../server/models/prefix";
 import Config from "../../../server/config";
 import {ChanState, ChanType} from "../../../shared/types/chan";
 import {MessageType} from "../../../shared/types/msg";
+import {ircCasefold} from "../../../shared/irc";
 
 describe("IRCv3 user metadata", function () {
 	beforeEach(function () {
@@ -34,6 +35,7 @@ describe("IRCv3 user metadata", function () {
 				existing ??
 				new Chan({name: "#chan", type: ChanType.CHANNEL, state: ChanState.JOINED});
 			const network = {
+				casefold: (value: string) => ircCasefold(value, "rfc1459"),
 				getChannel: (name: string) => (name === "#chan" ? chan : undefined),
 				addChannel: () => 1,
 				irc,
@@ -106,6 +108,7 @@ describe("IRCv3 user metadata", function () {
 			const emitted: any[] = [];
 			const irc = new EventEmitter() as any;
 			const network = {
+				casefold: (value: string) => ircCasefold(value, "rfc1459"),
 				getChannel: (name: string) => (name === "#chan" ? chan : undefined),
 				serverOptions: {PREFIX: new Prefix([{symbol: "@", mode: "o"}])},
 			} as any;

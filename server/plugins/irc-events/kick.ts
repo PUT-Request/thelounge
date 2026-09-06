@@ -15,18 +15,19 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		const user = chan.getUser(data.kicked!);
+		const kickedSelf = network.casefold(data.kicked!) === network.casefold(irc.user.nick);
 		const msg = new Msg({
 			type: MessageType.KICK,
 			time: data.time,
 			from: chan.getUser(data.nick),
 			target: user,
 			text: data.message || "",
-			highlight: data.kicked === irc.user.nick,
-			self: data.nick === irc.user.nick,
+			highlight: kickedSelf,
+			self: network.casefold(data.nick) === network.casefold(irc.user.nick),
 		});
 
 		// Self kicks should not be buffered and need special handling
-		if (data.kicked === irc.user.nick) {
+		if (kickedSelf) {
 			chan.pushMessage(client, msg);
 			chan.users = new Map();
 			chan.state = ChanState.PARTED;

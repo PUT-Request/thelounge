@@ -18,17 +18,18 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		const user = chan.getUser(data.nick);
+		const self = network.casefold(data.nick) === network.casefold(irc.user.nick);
 		const msg = new Msg({
 			type: MessageType.PART,
 			time: data.time,
 			text: data.message || "",
 			hostmask: data.ident + "@" + data.hostname,
 			from: user,
-			self: data.nick === irc.user.nick,
+			self,
 		});
 
 		// Self parts should not be buffered and need special handling
-		if (data.nick === irc.user.nick) {
+		if (self) {
 			chan.pushMessage(client, msg);
 			client.part(network, chan);
 			return;
