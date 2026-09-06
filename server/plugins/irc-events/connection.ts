@@ -152,7 +152,7 @@ export default <IrcEventHandler>function (irc, network) {
 		);
 	});
 
-	let identSocketId;
+	let identSocketId: number | undefined;
 
 	irc.on("raw socket connected", function (socket) {
 		let ident = client.name || network.username;
@@ -168,9 +168,9 @@ export default <IrcEventHandler>function (irc, network) {
 		clearRegistrationTimers();
 		cleanupHistoryFetches(network);
 
-		if (identSocketId > 0) {
+		if (identSocketId !== undefined && identSocketId > 0) {
 			client.manager.identHandler.removeSocket(identSocketId);
-			identSocketId = 0;
+			identSocketId = undefined;
 		}
 
 		monitorSyncPending = false;

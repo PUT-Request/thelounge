@@ -36,7 +36,7 @@ export default <IrcEventHandler>function (irc, network) {
 		let target = network.getLobby();
 
 		// If the reply references a channel that exists, show it there
-		if (data.context.length > 0) {
+		if (data.context && data.context.length > 0) {
 			for (const param of data.context) {
 				const channel = network.getChannel(param);
 

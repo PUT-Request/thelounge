@@ -34,7 +34,7 @@ export default <IrcEventHandler>function (irc, network) {
 		data: {
 			hostmask: string;
 			invited_by?: string;
-			inivted_at?: number;
+			invited_at?: number;
 		}[]
 	) {
 		if (data.length === 0) {

@@ -37,7 +37,9 @@ export default <IrcEventHandler>function (irc, network) {
 
 		// User list update callback - executed regardless of buffering
 		const updateUserList = () => {
-			chan.removeUser(user);
+			if (user) {
+				chan.removeUser(user);
+			}
 		};
 
 		// Try to process through mass event aggregator

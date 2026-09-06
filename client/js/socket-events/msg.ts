@@ -139,7 +139,7 @@ function notifyMessage(
 				let title: string;
 				let body: string;
 				// TODO: fix msg type and get rid of that conditional
-				const nick = msg.from && msg.from.nick ? msg.from.nick : "unkonown";
+				const nick = msg.from && msg.from.nick ? msg.from.nick : "unknown";
 
 				if (msg.type === MessageType.INVITE) {
 					title = "New channel invite:";

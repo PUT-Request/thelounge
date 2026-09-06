@@ -324,11 +324,17 @@ function parse(msg: Msg, chan: Chan, preview: LinkPreview, res: FetchRequest, cl
 	void promise.then((newRes) => handlePreview(client, chan, msg, preview, newRes));
 }
 
-function handlePreview(client: Client, chan: Chan, msg: Msg, preview: LinkPreview, res) {
+function handlePreview(
+	client: Client,
+	chan: Chan,
+	msg: Msg,
+	preview: LinkPreview,
+	res: FetchRequest | null
+) {
 	const thumb = preview.thumbActualUrl || "";
 	delete preview.thumbActualUrl;
 
-	if (!thumb.length || !Config.values.prefetchStorage) {
+	if (!thumb.length || !Config.values.prefetchStorage || !res) {
 		preview.thumb = thumb;
 		return emitPreview(client, chan, msg, preview);
 	}
