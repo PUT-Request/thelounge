@@ -127,7 +127,7 @@ const defaultConfig = {
 				throw new Error("theme meta element is not a meta element");
 			}
 
-			if (metaSelector) {
+			if (newTheme) {
 				const themeColor = newTheme.themeColor || metaSelector.content;
 				metaSelector.content = themeColor;
 			}

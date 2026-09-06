@@ -77,6 +77,24 @@ socket.on("msg", function (data) {
 	}
 });
 
+socket.on("quit", function () {
+	// Clear all typing timeouts when a network is removed
+	for (const [key, timeout] of typingTimeouts) {
+		clearTimeout(timeout);
+	}
+
+	typingTimeouts.clear();
+});
+
+socket.on("part", function () {
+	// Clear all typing timeouts when a channel is parted
+	for (const [key, timeout] of typingTimeouts) {
+		clearTimeout(timeout);
+	}
+
+	typingTimeouts.clear();
+});
+
 function removeTypingNick(channel: {typingNicks: string[]}, nick: string) {
 	const index = channel.typingNicks.indexOf(nick);
 

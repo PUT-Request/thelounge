@@ -157,9 +157,14 @@ function mergeChannelData(
 			currentChannel.messages = markMsgsRaw(newChannel.messages);
 		}
 
-		// TODO: this is copies more than what the compiler knows about
+		// Only copy properties that exist on both objects to avoid
+		// copying unexpected properties from the server
 		for (const key in newChannel) {
 			if (!Object.hasOwn(currentChannel, key)) {
+				continue;
+			}
+
+			if (!Object.prototype.hasOwnProperty.call(newChannel, key)) {
 				continue;
 			}
 

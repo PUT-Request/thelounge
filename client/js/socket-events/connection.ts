@@ -38,7 +38,7 @@ socket.on("connect", function () {
 });
 
 function handleDisconnect(type: DisconnectionType, data) {
-	const message = String(data.message || data);
+	const message = data instanceof Error ? data.message : String(data.message || data);
 
 	store.commit("isConnected", false);
 

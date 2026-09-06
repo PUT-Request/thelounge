@@ -14,7 +14,7 @@ socket.on("quit", async function (data) {
 		return;
 	}
 
-	if (store.state.networks.length > 0) {
+	if (store.state.networks.length > 0 && store.state.networks[0].channels.length > 0) {
 		switchToChannel(store.state.networks[0].channels[0]);
 	} else {
 		await navigate("Connect");

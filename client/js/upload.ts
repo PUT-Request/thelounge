@@ -258,6 +258,26 @@ class Uploader {
 			false
 		);
 
+		// Clear tokenKeepAlive on error or abort to prevent interval leak
+		const cleanupKeepAlive = () => {
+			if (this.tokenKeepAlive) {
+				clearInterval(this.tokenKeepAlive);
+				this.tokenKeepAlive = null;
+			}
+		};
+
+		this.xhr.onerror = () => {
+			cleanupKeepAlive();
+			this.handleResponse({error: "Upload failed due to network error"});
+			this.xhr = null;
+		};
+
+		this.xhr.onabort = () => {
+			cleanupKeepAlive();
+			this.handleResponse({error: "Upload aborted"});
+			this.xhr = null;
+		};
+
 		this.xhr.onreadystatechange = () => {
 			if (this.xhr?.readyState === XMLHttpRequest.DONE) {
 				let response;
@@ -274,6 +294,7 @@ class Uploader {
 					};
 				}
 
+				cleanupKeepAlive();
 				this.handleResponse(response);
 
 				this.xhr = null;

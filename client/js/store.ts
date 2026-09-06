@@ -332,6 +332,11 @@ const mutations: Mutations = {
 		state.messageSearchResults = value;
 	},
 	addMessageSearchResults(state, value) {
+		// Guard against falsy value early to avoid mutating state unnecessarily
+		if (!value) {
+			return;
+		}
+
 		// Append the search results and add networks and channels to new messages
 		if (!state.messageSearchResults) {
 			state.messageSearchResults = {
@@ -340,10 +345,6 @@ const mutations: Mutations = {
 				scrollTop: 0,
 				hasMore: value.hasMore,
 			};
-		}
-
-		if (!value) {
-			return;
 		}
 
 		const previousResults = state.messageSearchResults.results;

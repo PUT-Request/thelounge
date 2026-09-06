@@ -27,9 +27,11 @@ socket.once("push:issubscribed", function (hasSubscriptionOnServer) {
 				// this subscription is broken and client has to register again
 				if (subscription && hasSubscriptionOnServer === false) {
 					void subscription.unsubscribe().then((successful) => {
+						// Unsubscribe failure doesn't mean push is unsupported,
+						// just that the unsubscribe operation failed
 						store.commit(
 							"pushNotificationState",
-							successful ? "supported" : "unsupported"
+							successful ? "supported" : "supported"
 						);
 					});
 				} else {
@@ -56,16 +58,25 @@ function togglePushSubscription() {
 					socket.emit("push:unregister");
 
 					return existingSubscription.unsubscribe().then((successful) => {
+						// Unsubscribe failure doesn't mean push is unsupported,
+						// just that the unsubscribe operation failed
 						store.commit(
 							"pushNotificationState",
-							successful ? "supported" : "unsupported"
+							successful ? "supported" : "supported"
 						);
 					});
 				}
 
+				const applicationServerKey = store.state.serverConfiguration?.applicationServerKey;
+
+				if (!applicationServerKey) {
+					store.commit("pushNotificationState", "unsupported");
+					return;
+				}
+
 				return registration.pushManager
 					.subscribe({
-						applicationServerKey: store.state.serverConfiguration?.applicationServerKey,
+						applicationServerKey,
 						userVisibleOnly: true,
 					})
 					.then((subscription) => {

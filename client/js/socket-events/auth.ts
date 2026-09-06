@@ -58,7 +58,7 @@ socket.on("auth:start", async function (serverHash) {
 
 		for (const network of store.state.networks) {
 			for (const chan of network.channels) {
-				if (chan.messages.length > 0) {
+				if (chan.messages?.length > 0) {
 					const id = chan.messages[chan.messages.length - 1].id;
 
 					if (lastMessage < id) {

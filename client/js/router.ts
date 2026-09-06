@@ -113,9 +113,12 @@ router.beforeEach((to, from, next) => {
 	// If user is not yet signed in, wait for appLoaded state to change
 	// unless they are trying to open SignIn (which can be triggered in auth.js)
 	if (!store.state.appLoaded && to.name !== "SignIn") {
-		store.watch(
+		const unwatch = store.watch(
 			(state) => state.appLoaded,
-			() => next()
+			() => {
+				unwatch();
+				next();
+			}
 		);
 
 		return;
@@ -209,7 +212,11 @@ async function navigate(
 		// If current route is null, replace the history entry
 		// This prevents invalid entries from lingering in history,
 		// and then the route guard preventing proper navigation
-		await router.replace({name: routeName, params, query}).catch(() => {});
+		await router.replace({name: routeName, params, query}).catch((err) => {
+			// Log navigation errors for debugging
+			// eslint-disable-next-line no-console
+			console.error("Navigation failed:", err);
+		});
 	}
 }
 
@@ -229,7 +236,17 @@ function switchToChannel(channel: ClientChan, message?: {id?: number; storageId?
 if ("serviceWorker" in navigator) {
 	navigator.serviceWorker.addEventListener("message", (event) => {
 		if (event.data && event.data.type === "open") {
-			const id = parseInt(event.data.channel.substring(5), 10); // remove "chan-" prefix
+			const channelIdStr = event.data.channel;
+
+			if (typeof channelIdStr !== "string" || !channelIdStr.startsWith("chan-")) {
+				return;
+			}
+
+			const id = parseInt(channelIdStr.substring(5), 10);
+
+			if (Number.isNaN(id)) {
+				return;
+			}
 
 			const channelTarget = store.getters.findChannel(id);
 

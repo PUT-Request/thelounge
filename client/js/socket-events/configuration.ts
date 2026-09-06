@@ -24,8 +24,11 @@ socket.once("configuration", function (data) {
 			sync: true,
 		});
 	} else if (currentTheme.themeColor) {
-		(document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content =
-			currentTheme.themeColor;
+		const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+
+		if (metaThemeColor instanceof HTMLMetaElement) {
+			metaThemeColor.content = currentTheme.themeColor;
+		}
 	}
 
 	if (document.body.classList.contains("public")) {

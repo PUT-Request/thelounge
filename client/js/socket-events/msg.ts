@@ -124,11 +124,12 @@ function notifyMessage(
 	) {
 		if (!document.hasFocus() || !activeChannel || activeChannel.channel !== channel) {
 			if (store.state.settings.notification) {
-				try {
-					pop.play();
-				} catch (exception) {
+				// pop.play() returns a Promise that can be rejected (autoplay policy)
+				// Handle the rejection to avoid unhandled promise rejection warnings
+				pop.play().catch(() => {
 					// On mobile, sounds can not be played without user interaction.
-				}
+					// Silencing the error as it's expected behavior.
+				});
 			}
 
 			if (
