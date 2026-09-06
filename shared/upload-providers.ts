@@ -48,31 +48,37 @@ export const UploadProviders: UploadProvider[] = [
 				value: "-",
 				default: true,
 			},
+
 			{
 				id: "1hour",
 				displayName: "1 Hour",
 				value: "3600",
 			},
+
 			{
 				id: "12hours",
 				displayName: "12 Hours",
 				value: "43200",
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "86400",
 			},
+
 			{
 				id: "1week",
 				displayName: "1 Week",
 				value: "604800",
 			},
+
 			{
 				id: "1month",
 				displayName: "1 Month",
 				value: "2592000",
 			},
+
 			{
 				id: "custom",
 				displayName: "Custom",
@@ -83,6 +89,7 @@ export const UploadProviders: UploadProvider[] = [
 			return Promise.resolve("dummy");
 		},
 	},
+
 	{
 		id: "imagebb",
 		displayName: "ImageBB",
@@ -93,17 +100,20 @@ export const UploadProviders: UploadProvider[] = [
 				displayName: "1 Week",
 				value: "604800",
 			},
+
 			{
 				id: "3days",
 				displayName: "3 Days",
 				value: "259200",
 				default: true,
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "86400",
 			},
+
 			{
 				id: "forever",
 				displayName: "Keep Forever",
@@ -115,7 +125,12 @@ export const UploadProviders: UploadProvider[] = [
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
-			payload.append("key", token!);
+
+			if (!token) {
+				throw new Error("API token is required for ImageBB uploads");
+			}
+
+			payload.append("key", token);
 			payload.append("image", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
@@ -127,13 +142,19 @@ export const UploadProviders: UploadProvider[] = [
 				body: payload,
 			});
 
-			const json = await response.json();
+			let json: any;
 
-			if (!response.ok) {
-				throw new Error(json.error?.message ?? "Unknown Error");
+			try {
+				json = await response.json();
+			} catch {
+				throw new Error("Invalid response from ImageBB");
 			}
 
-			const url = <string>json.data?.url ?? "";
+			if (!response.ok) {
+				throw new Error(json?.error?.message ?? "Unknown Error");
+			}
+
+			const url = <string>json?.data?.url ?? "";
 
 			if (!url.startsWith("http")) {
 				throw new Error(url ?? "Unknown Error");
@@ -142,6 +163,7 @@ export const UploadProviders: UploadProvider[] = [
 			return url;
 		},
 	},
+
 	{
 		id: "catbox",
 		displayName: "Catbox",
@@ -153,11 +175,13 @@ export const UploadProviders: UploadProvider[] = [
 				value: "72h",
 				default: true,
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "24h",
 			},
+
 			{
 				id: "forever",
 				displayName: "Keep Forever",
@@ -193,6 +217,7 @@ export const UploadProviders: UploadProvider[] = [
 			return url;
 		},
 	},
+
 	{
 		id: "ptscreens",
 		displayName: "PTScreens",
@@ -203,17 +228,20 @@ export const UploadProviders: UploadProvider[] = [
 				displayName: "1 Week",
 				value: "P7D",
 			},
+
 			{
 				id: "3days",
 				displayName: "3 Days",
 				value: "P3D",
 				default: true,
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "P1D",
 			},
+
 			{
 				id: "forever",
 				displayName: "Keep Forever",
@@ -226,7 +254,12 @@ export const UploadProviders: UploadProvider[] = [
 
 			const payload = new FormData();
 			payload.append("format", "txt");
-			payload.append("key", token!);
+
+			if (!token) {
+				throw new Error("API token is required for PTScreens uploads");
+			}
+
+			payload.append("key", token);
 			payload.append("source", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
@@ -247,6 +280,7 @@ export const UploadProviders: UploadProvider[] = [
 			return url;
 		},
 	},
+
 	{
 		id: "quax",
 		displayName: "qu.ax",
@@ -257,17 +291,20 @@ export const UploadProviders: UploadProvider[] = [
 				displayName: "1 Week",
 				value: "7",
 			},
+
 			{
 				id: "3days",
 				displayName: "3 Days",
 				value: "3",
 				default: true,
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "1",
 			},
+
 			{
 				id: "forever",
 				displayName: "Keep Forever",
@@ -315,6 +352,7 @@ export const UploadProviders: UploadProvider[] = [
 			return `https://qu.ax/x/${fName}.${file.name.split(".").pop()}`;
 		},
 	},
+
 	{
 		id: "uguu",
 		displayName: "Uguu",
@@ -337,7 +375,13 @@ export const UploadProviders: UploadProvider[] = [
 				body: payload,
 			});
 
-			const json = await response.json();
+			let json: any;
+
+			try {
+				json = await response.json();
+			} catch {
+				throw new Error("Invalid response from Uguu");
+			}
 
 			if (!response.ok || json?.success !== true) {
 				throw new Error(json?.description ?? "Unknown Error");
@@ -352,6 +396,7 @@ export const UploadProviders: UploadProvider[] = [
 			return url;
 		},
 	},
+
 	{
 		id: "onlyimage",
 		displayName: "OnlyImage",
@@ -362,17 +407,20 @@ export const UploadProviders: UploadProvider[] = [
 				displayName: "1 Week",
 				value: "P7D",
 			},
+
 			{
 				id: "3days",
 				displayName: "3 Days",
 				value: "P3D",
 				default: true,
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "P1D",
 			},
+
 			{
 				id: "forever",
 				displayName: "Keep Forever",
@@ -381,11 +429,15 @@ export const UploadProviders: UploadProvider[] = [
 		],
 		supportNote: "Supported files: Images",
 		async upload(file: File, ttl: string, token?: string) {
+			if (!token) {
+				throw new Error("API token is required for OnlyImage uploads");
+			}
+
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
 			payload.append("format", "txt");
-			payload.append("key", token!);
+			payload.append("key", token);
 			payload.append("source", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
@@ -406,6 +458,7 @@ export const UploadProviders: UploadProvider[] = [
 			return url;
 		},
 	},
+
 	{
 		id: "img.tnb.moe",
 		displayName: "img.tnb.moe",
@@ -416,16 +469,19 @@ export const UploadProviders: UploadProvider[] = [
 				displayName: "1 Week",
 				value: "P7D",
 			},
+
 			{
 				id: "3days",
 				displayName: "3 Days",
 				value: "P3D",
 			},
+
 			{
 				id: "1day",
 				displayName: "1 Day",
 				value: "P1D",
 			},
+
 			{
 				id: "forever",
 				displayName: "Keep Forever",
@@ -435,11 +491,15 @@ export const UploadProviders: UploadProvider[] = [
 		],
 		supportNote: "Supported files: Images",
 		async upload(file: File, ttl: string, token?: string) {
+			if (!token) {
+				throw new Error("API token is required for img.tnb.moe uploads");
+			}
+
 			const uploadTTL = this.validTtl?.find((t) => t.id === ttl);
 
 			const payload = new FormData();
 			payload.append("format", "txt");
-			payload.append("key", token!);
+			payload.append("key", token);
 			payload.append("source", file);
 
 			if (uploadTTL && uploadTTL.id !== "forever") {
@@ -460,6 +520,7 @@ export const UploadProviders: UploadProvider[] = [
 			return url;
 		},
 	},
+
 	{
 		id: "ptpimg",
 		displayName: "ptpimg",
@@ -474,9 +535,13 @@ export const UploadProviders: UploadProvider[] = [
 		],
 		supportNote: "Supported files: Images",
 		async upload(file: File, ttl: string, token?: string) {
+			if (!token) {
+				throw new Error("API token is required for ptpimg uploads");
+			}
+
 			const payload = new FormData();
 			payload.append("format", "json");
-			payload.append("api_key", token!);
+			payload.append("api_key", token);
 			payload.append("file-upload[0]", file);
 
 			const response = await fetch("https://ptpimg.me/upload.php", {
@@ -484,6 +549,7 @@ export const UploadProviders: UploadProvider[] = [
 				headers: {
 					referer: "https://ptpimg.me/index.php",
 				},
+
 				body: payload,
 			});
 
@@ -496,6 +562,7 @@ export const UploadProviders: UploadProvider[] = [
 			return `https://ptpimg.me/${json[0].code}.${json[0].ext}`;
 		},
 	},
+
 	{
 		id: "xbackbone",
 		displayName: "XBackBone",
@@ -504,8 +571,23 @@ export const UploadProviders: UploadProvider[] = [
 		supportNote:
 			"Supported files: Images, Videos, Audio, and Text\nNOTE: You must have 'Hide Media by Default' disabled for your profile",
 		async upload(file: File, ttl: string, url_token?: string) {
-			const [encodedRequestURL, auth] = url_token!.split("_|_");
-			const requestURL = atob(encodedRequestURL);
+			if (!url_token) {
+				throw new Error("URL and token are required for XBackBone uploads");
+			}
+
+			const [encodedRequestURL, auth] = url_token.split("_|_");
+
+			if (!encodedRequestURL) {
+				throw new Error("Invalid XBackBone upload URL encoding");
+			}
+
+			let requestURL: string;
+
+			try {
+				requestURL = atob(encodedRequestURL);
+			} catch {
+				throw new Error("Invalid XBackBone upload URL encoding");
+			}
 
 			if (!requestURL.startsWith("http")) {
 				throw new Error("Invalid Upload URL");
@@ -525,13 +607,19 @@ export const UploadProviders: UploadProvider[] = [
 				body: payload,
 			});
 
-			const json = await response.json();
+			let json: any;
+
+			try {
+				json = await response.json();
+			} catch {
+				throw new Error("Invalid response from XBackBone");
+			}
 
 			if (!response.ok) {
 				throw new Error("Unknown Error");
 			}
 
-			const url = <string>json.raw_url ?? "";
+			const url = <string>json?.raw_url ?? "";
 
 			if (!url.startsWith("http")) {
 				throw new Error("Unknown Error");

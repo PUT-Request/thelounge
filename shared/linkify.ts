@@ -50,6 +50,7 @@ linkify.add("web+", {
 	validate(text: string, pos: number, self: LinkifyIt) {
 		try {
 			const webSchemaRe = /^[a-z]+:/gi;
+			webSchemaRe.lastIndex = 0;
 
 			if (!webSchemaRe.test(text.slice(pos))) {
 				return 0;
