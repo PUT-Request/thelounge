@@ -40,7 +40,18 @@ export function normalizeAccountName(account: unknown): string | undefined {
 
 export type IrcCaseMapping = "ascii" | "strict-rfc1459" | "rfc1459";
 
+/**
+ * Casefolds an IRC identifier (nick/channel) per the server's CASEMAPPING.
+ *
+ * Never throws: non-string input (e.g. an absent `data.nick` on a topic
+ * received at join time) yields an empty string instead of a `TypeError`,
+ * so unexpected payloads cannot crash an event handler.
+ */
 export function ircCasefold(value: string, mapping: string = "rfc1459"): string {
+	if (typeof value !== "string") {
+		return "";
+	}
+
 	const lowered = value.toLowerCase();
 
 	if (mapping === "ascii") {
