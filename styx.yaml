@@ -44,8 +44,8 @@ prompt: |
 
 mode: read_write
 
-api_endpoint: https://llm.fmhy.bid/v1
-api_key: sk-_ZuwHi7Cj3HZyHvpVl4EjNdIUgDn17RpR
+api_endpoint: ${STYX_API_ENDPOINT}
+api_key: ${STYX_API_KEY}
 model: meituan/LongCat-2.0:free
 max_context: 2560000
 max_working_time: 240m
