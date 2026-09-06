@@ -168,6 +168,12 @@
 				:checked="store.state.settings.enhancedContextMenuEnabled"
 			/>
 			<SettingToggle
+				name="showUserIdentity"
+				label="Show account and host in user menu"
+				description="Display the tracked services account and user@host under the nickname"
+				:checked="store.state.settings.showUserIdentity"
+			/>
+			<SettingToggle
 				name="enableRainbowHotkey"
 				label="Rainbow hotkey"
 				description="Enable Ctrl/Cmd+R shortcut for /rainbow text formatting"

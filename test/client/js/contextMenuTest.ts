@@ -10,8 +10,22 @@ vi.mock("../../../client/js/router", () => ({
 import {generateUserContextMenu} from "../../../client/js/helpers/contextMenu";
 import {ChanType} from "../../../shared/types/chan";
 
-function setup(users: any[] = [], channelExtra: any = {}) {
-	const store = {} as any;
+function setup(
+	users: any[] = [],
+	channelExtra: any = {},
+	settingsExtra: any = {},
+	networkExtra: any = {}
+) {
+	const store = {
+		state: {
+			settings: {
+				enhancedContextMenuEnabled: true,
+				showUserIdentity: true,
+				...settingsExtra,
+			},
+		},
+		getters: {},
+	} as any;
 	const channel = {
 		id: 1,
 		name: "#chan",
@@ -23,6 +37,7 @@ function setup(users: any[] = [], channelExtra: any = {}) {
 		nick: "me",
 		channels: [],
 		serverOptions: {},
+		...networkExtra,
 	} as any;
 
 	return {store, channel, network};
@@ -62,5 +77,42 @@ describe("generateUserContextMenu", function () {
 		const info = items.filter((i) => i.type === "info");
 
 		expect(info.map((i: any) => i.label)).to.deep.equal(["h.example"]);
+	});
+
+	it("hides identity rows when showUserIdentity is off", function () {
+		const {store, channel, network} = setup(
+			[{nick: "bob", modes: [], account: "bob-acc", hostname: "host.example"}],
+			{},
+			{showUserIdentity: false}
+		);
+
+		const items = generateUserContextMenu(store, channel, network, {nick: "bob", modes: []});
+
+		expect(items.some((i) => i.type === "info")).to.be.false;
+	});
+
+	it("falls back to a classic menu when enhanced menu is off", function () {
+		const torrentSite = {profileUrl: "https://tracker.example/users/", disabled: false};
+		const {store, channel, network} = setup(
+			[{nick: "bob", modes: [], account: "bob-acc", hostname: "host.example"}],
+			{torrentSite},
+			{enhancedContextMenuEnabled: false}
+		);
+
+		const items = generateUserContextMenu(store, channel, network, {nick: "bob", modes: []});
+
+		expect(items.some((i) => i.type === "info")).to.be.false;
+		expect(items.some((i: any) => i.label === "Tracker Profile")).to.be.false;
+	});
+
+	it("shows tracker profile when enhanced menu is on", function () {
+		const torrentSite = {profileUrl: "https://tracker.example/users/", disabled: false};
+		const {store, channel, network} = setup([{nick: "bob", modes: []}], {torrentSite});
+
+		const items = generateUserContextMenu(store, channel, network, {nick: "bob", modes: []});
+		const tracker = items.find((i: any) => i.label === "Tracker Profile") as any;
+
+		expect(tracker).to.exist;
+		expect(tracker.class).to.equal("action-open");
 	});
 });

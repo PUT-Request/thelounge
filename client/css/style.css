@@ -387,6 +387,8 @@ p {
 .context-menu-edit::before { content: "\f303"; /* https://fontawesome.com/icons/pencil-alt?style=solid */ }
 .context-menu-clear-history::before { content: "\f1f8"; /* https://fontawesome.com/icons/trash?style=solid */ }
 .context-menu-mute::before { content: "\f6a9"; /* https://fontawesome.com/v5.15/icons/volume-mute?style=solid */ }
+.context-menu-action-open::before { content: "\f35d"; /* https://fontawesome.com/icons/external-link-alt?style=solid */ }
+.context-menu-pin::before { content: "\f08d"; /* https://fontawesome.com/icons/thumbtack?style=solid */ }
 
 .channel-list-item .not-secure-icon::before {
 	content: "\f071"; /* https://fontawesome.com/icons/exclamation-triangle?style=solid */

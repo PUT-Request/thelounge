@@ -38,6 +38,7 @@ export type ContextMenuItem =
 	| ContextMenuInfoItem;
 
 export function generateChannelContextMenu(
+	store: TypedStore,
 	channel: ClientChan,
 	network: ClientNetwork
 ): ContextMenuItem[] {
@@ -155,7 +156,11 @@ export function generateChannelContextMenu(
 
 	// Add menu items for queries
 	if (channel.type === ChanType.QUERY) {
-		if (channel.torrentSite && !channel.torrentSite.disabled) {
+		if (
+			store.state.settings.enhancedContextMenuEnabled &&
+			channel.torrentSite &&
+			!channel.torrentSite.disabled
+		) {
 			items.push({
 				label: `Tracker Profile`,
 				type: "item",
@@ -388,7 +393,12 @@ export function generateUserContextMenu(
 		},
 	];
 
-	if (channel.torrentSite && !channel.torrentSite.disabled && user.senderType !== "bot") {
+	if (
+		store.state.settings.enhancedContextMenuEnabled &&
+		channel.torrentSite &&
+		!channel.torrentSite.disabled &&
+		user.senderType !== "bot"
+	) {
 		items.splice(1, 0, {
 			label: `Tracker Profile`,
 			type: "item",
@@ -401,18 +411,22 @@ export function generateUserContextMenu(
 
 	// User card: surface the identity we track for this nick (IRCv3
 	// account-tag, extended-join, userhost-in-names) under the header.
+	// Both the enhanced menu and the identity lines themselves can be
+	// switched off in Appearance settings.
 	const tracked = channel?.users.find((u) => u.nick === user.nick) ?? user;
 	const infoItems: ContextMenuInfoItem[] = [];
 
-	if (tracked.account) {
-		infoItems.push({type: "info", label: `Logged in as ${tracked.account}`});
-	}
+	if (store.state.settings.enhancedContextMenuEnabled && store.state.settings.showUserIdentity) {
+		if (tracked.account) {
+			infoItems.push({type: "info", label: `Logged in as ${tracked.account}`});
+		}
 
-	if (tracked.hostname) {
-		infoItems.push({
-			type: "info",
-			label: tracked.ident ? `${tracked.ident}@${tracked.hostname}` : tracked.hostname,
-		});
+		if (tracked.hostname) {
+			infoItems.push({
+				type: "info",
+				label: tracked.ident ? `${tracked.ident}@${tracked.hostname}` : tracked.hostname,
+			});
+		}
 	}
 
 	if (infoItems.length > 0) {

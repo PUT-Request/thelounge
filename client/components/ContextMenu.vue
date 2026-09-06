@@ -202,7 +202,7 @@ export default defineComponent({
 				});
 			}
 
-			const newItems = generateChannelContextMenu(data.channel, data.network);
+			const newItems = generateChannelContextMenu(store, data.channel, data.network);
 			open(data.event, newItems);
 		};
 

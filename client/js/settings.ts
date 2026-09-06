@@ -190,6 +190,9 @@ const defaultConfig = {
 	enhancedContextMenuEnabled: {
 		default: true,
 	},
+	showUserIdentity: {
+		default: true,
+	},
 	enableRainbowHotkey: {
 		default: true,
 	},
