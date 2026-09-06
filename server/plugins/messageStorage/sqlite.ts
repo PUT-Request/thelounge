@@ -1310,6 +1310,7 @@ function parseStoredRow(row: StoredRow, nextID: () => number): Message {
 	if (typeof msg !== "object" || msg === null) {
 		throw new Error(`Corrupt stored message id=${row.id}: expected an object`);
 	}
+
 	msg.time = row.time;
 	msg.type = row.type;
 

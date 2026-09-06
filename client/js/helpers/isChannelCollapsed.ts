@@ -1,6 +1,7 @@
 import {store} from "../store";
 
 import type {ClientChan, ClientNetwork} from "../types";
+import {ChanType} from "../../../shared/types/chan";
 
 /**
  * Checks whether a channel should render collapsed under a collapsed network.
@@ -21,7 +22,7 @@ export default (
 			return false;
 		}
 
-		if (!network.isCollapsed || channel.highlight || channel.type === "lobby") {
+		if (!network.isCollapsed || channel.highlight || channel.type === ChanType.LOBBY) {
 			return false;
 		}
 

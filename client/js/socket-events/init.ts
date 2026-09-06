@@ -73,9 +73,14 @@ function readCollapsedNetworks(): Set<string> {
 
 	try {
 		const parsed: unknown = JSON.parse(stored);
-		return new Set(Array.isArray(parsed) ? parsed : []);
+
+		if (!Array.isArray(parsed)) {
+			return new Set<string>();
+		}
+
+		return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
 	} catch {
-		return new Set();
+		return new Set<string>();
 	}
 }
 
@@ -197,9 +202,23 @@ async function handleQueryParams() {
 	if (params.has("uri")) {
 		// Set default connection settings from IRC protocol links
 		const uri = params.get("uri");
-		const queryParams = parseIrcUri(String(uri));
+		const parsed = parseIrcUri(String(uri));
 		removeQueryParams();
-		await router.push({name: "Connect", query: queryParams});
+
+		if (parsed) {
+			// Route query values serialize to strings in the URL; convert
+			// explicitly (e.g. the tls boolean) instead of relying on it
+			const query: Record<string, string> = {};
+
+			for (const [key, value] of Object.entries(parsed)) {
+				query[key] = String(value);
+			}
+
+			await router.push({name: "Connect", query});
+		} else {
+			await router.push({name: "Connect"});
+		}
+
 		return true;
 	}
 

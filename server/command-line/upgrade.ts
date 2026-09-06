@@ -29,6 +29,7 @@ program
 			log.warn("There are no packages installed.");
 			return;
 		}
+
 		const argsList = ["upgrade", "--latest"];
 
 		let count = 0;

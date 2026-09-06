@@ -245,6 +245,7 @@ async function outdated(cacheTimeout = TIME_TO_LIVE) {
 	if (!packagesList) {
 		return false;
 	}
+
 	const argsList = [
 		"outdated",
 		"--latest",

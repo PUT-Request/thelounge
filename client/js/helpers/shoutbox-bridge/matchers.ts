@@ -17,6 +17,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -39,6 +40,7 @@ export const matchers: Matcher[] = [
 		regex: /^0 \[2 SB0 \] \((?<nick>[^):]+)\): (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -61,6 +63,7 @@ export const matchers: Matcher[] = [
 		regex: /^11\[04(?<nick>[^:\]]+?)11\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -83,6 +86,7 @@ export const matchers: Matcher[] = [
 		regex: /^09\[SB\] (?<nick>[^:]+): (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -105,6 +109,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -127,6 +132,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[Web\] (?<nick>[^:]+): (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -149,6 +155,7 @@ export const matchers: Matcher[] = [
 		regex: /^<(?<nick>[^>]+?)> (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -171,6 +178,7 @@ export const matchers: Matcher[] = [
 		regex: /^<(?<nick>[^>]+?)> (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -193,6 +201,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^\]]+)\] \([^)]+\): (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -215,6 +224,7 @@ export const matchers: Matcher[] = [
 		regex: /^»(?<nick>[^«]+?)(?: (?:\p{RGI_Emoji}+|\(.+?\)))?« (?<content>.*)/v,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -258,6 +268,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -280,6 +291,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -302,6 +314,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\]: (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -324,6 +337,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -346,6 +360,7 @@ export const matchers: Matcher[] = [
 		regex: /^04\[Chatbox\] (?<nick>[^:]+): (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -368,6 +383,7 @@ export const matchers: Matcher[] = [
 		regex: /^<(?<nick>[^>]+?)> (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -390,6 +406,7 @@ export const matchers: Matcher[] = [
 		regex: /^🛰️(?<nick>[^:]+?): (?<content>.*)/v,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -412,6 +429,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\]: (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -434,6 +452,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
@@ -456,6 +475,7 @@ export const matchers: Matcher[] = [
 		regex: /^\[(?<nick>[^:\]]+)\]: (?<content>.*)/,
 		transform(message) {
 			const text = typeof message?.text === "string" ? message.text : "";
+
 			if (!text) {
 				return undefined;
 			}
