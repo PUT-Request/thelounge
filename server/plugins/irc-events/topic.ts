@@ -18,7 +18,7 @@ export default <IrcEventHandler>function (irc, network) {
 			type: MessageType.TOPIC,
 			from: data.nick && chan.getUser(data.nick),
 			text: data.topic,
-			self: network.casefold(data.nick) === network.casefold(irc.user.nick),
+			self: !!data.nick && network.casefold(data.nick) === network.casefold(irc.user.nick),
 		});
 		chan.pushMessage(client, msg);
 
@@ -40,7 +40,7 @@ export default <IrcEventHandler>function (irc, network) {
 			type: MessageType.TOPIC_SET_BY,
 			from: chan.getUser(data.nick),
 			when: new Date(data.when * 1000),
-			self: network.casefold(data.nick) === network.casefold(irc.user.nick),
+			self: !!data.nick && network.casefold(data.nick) === network.casefold(irc.user.nick),
 		});
 		chan.pushMessage(client, msg);
 	});

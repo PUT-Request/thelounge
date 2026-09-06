@@ -25,4 +25,11 @@ describe("ircCasefold", function () {
 	it("uses RFC1459 caret/tilde equivalence", function () {
 		expect(ircCasefold("Nick[\\^", "rfc1459")).to.equal("nick{|~");
 	});
+
+	it("returns an empty string for non-string input instead of throwing", function () {
+		// A topic received at join time (RPL_TOPIC) has no setter nick, so
+		// data.nick is undefined; casefolding it must not crash the handler.
+		expect(ircCasefold(undefined as unknown as string)).to.equal("");
+		expect(ircCasefold(null as unknown as string)).to.equal("");
+	});
 });
