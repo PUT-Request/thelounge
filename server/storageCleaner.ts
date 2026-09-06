@@ -117,9 +117,14 @@ export class StorageCleaner {
 		this.ticker = setTimeout(() => {
 			try {
 				this.runDeletes();
-			} catch (err) {
-				log.error("storageCleaner: unexpected failure");
-				throw err;
+			} catch (err: any) {
+				log.error(`storageCleaner: unexpected failure: ${err.message}`);
+				// Don't throw in setTimeout callback - it would be unhandled
+				// Schedule next run instead
+
+				if (!this.isStopped) {
+					this.schedule(5 * 60 * 1000);
+				}
 			}
 		}, ms);
 	}
