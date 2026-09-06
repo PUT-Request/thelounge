@@ -4,12 +4,14 @@ import Msg from "../../models/msg";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType, SpecialChanType} from "../../../shared/types/chan";
 import type {PendingInvite} from "../../models/network";
+import Config from "../../config";
+import log from "../../log";
 
 const INVITES_WINDOW_NAME = "Invites";
 
 export function upsertPendingInvite(network: Network, invite: PendingInvite): void {
 	const existing = network.pendingInvites.find(
-		(entry) => entry.channel.toLowerCase() === invite.channel.toLowerCase()
+		(entry) => network.casefold(entry.channel) === network.casefold(invite.channel)
 	);
 
 	if (existing) {
@@ -22,7 +24,7 @@ export function upsertPendingInvite(network: Network, invite: PendingInvite): vo
 
 export function removePendingInvite(network: Network, channel: string): boolean {
 	const index = network.pendingInvites.findIndex(
-		(entry) => entry.channel.toLowerCase() === channel.toLowerCase()
+		(entry) => network.casefold(entry.channel) === network.casefold(channel)
 	);
 
 	if (index === -1) {
@@ -87,7 +89,7 @@ export default <IrcEventHandler>function (irc, network) {
 			chan = network.getLobby();
 		}
 
-		const invitedYou = data.invited === irc.user.nick;
+		const invitedYou = network.casefold(data.invited) === network.casefold(irc.user.nick);
 
 		const msg = new Msg({
 			type: MessageType.INVITE,
@@ -102,6 +104,18 @@ export default <IrcEventHandler>function (irc, network) {
 
 		if (!invitedYou) {
 			return;
+		}
+
+		if (!Config.values.public) {
+			try {
+				client.flushMessageStorage();
+			} catch (error: unknown) {
+				log.error(
+					`Failed to persist invite: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
+			}
 		}
 
 		upsertPendingInvite(network, {

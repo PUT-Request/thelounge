@@ -30,7 +30,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 			switch (chan.type) {
 				case ChanType.QUERY: {
-					if (data.nick.toLowerCase() !== chan.name.toLowerCase()) {
+					if (network.casefold(data.nick) !== network.casefold(chan.name)) {
 						return;
 					}
 
@@ -57,7 +57,9 @@ export default <IrcEventHandler>function (irc, network) {
 						from: user,
 					});
 
-					chan.pushMessage(client, msg);
+					if (!client.massEventAggregator.processMessage(network, chan, msg)) {
+						chan.pushMessage(client, msg);
+					}
 
 					break;
 				}

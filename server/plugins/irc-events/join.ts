@@ -47,6 +47,7 @@ export default <IrcEventHandler>function (irc, network) {
 	};
 
 	irc.on("join", function (data) {
+		const self = network.casefold(data.nick) === network.casefold(irc.user.nick);
 		let chan = network.getChannel(data.channel);
 
 		if (typeof chan === "undefined") {
@@ -67,7 +68,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 			// Request channels' modes
 			network.irc.raw("MODE", chan.name);
-		} else if (data.nick === irc.user.nick) {
+		} else if (self) {
 			chan.state = ChanState.JOINED;
 
 			client.emit("channel:state", {
@@ -77,7 +78,7 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		// Joining a channel answers its pending invite, if any
-		if (data.nick === irc.user.nick && removePendingInvite(network, data.channel)) {
+		if (self && removePendingInvite(network, data.channel)) {
 			syncInvitesWindow(client, network);
 		}
 
@@ -95,7 +96,7 @@ export default <IrcEventHandler>function (irc, network) {
 			gecos: data.gecos,
 			account: data.account,
 			type: MessageType.JOIN,
-			self: data.nick === irc.user.nick,
+			self,
 		});
 
 		const isBot = "bot" in (data.tags || {});
@@ -131,7 +132,7 @@ export default <IrcEventHandler>function (irc, network) {
 		}
 
 		// When we join a channel, send WHO to get initial away statuses
-		if (data.nick === irc.user.nick) {
+		if (self) {
 			performWhoOnChannel(chan);
 		}
 	});

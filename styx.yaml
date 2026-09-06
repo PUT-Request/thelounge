@@ -6,23 +6,23 @@ prompt: |
 
     Steps:
     1. Create a branch: git checkout -b styx/fixes-$(date +%s)
-    2. Install dependencies: npm ci
+    2. Install dependencies: yarn install --frozen-lockfile
     3. Audit all TypeScript files (.ts, .tsx) for bugs
     4. Fix each bug you find
     5. After EVERY fix, verify it compiles:
-       - npm run build
-       - npx tsc --noEmit
-    6. Run tests: npm run test
+       - yarn build
+       - yarn tsc --noEmit
+    6. Run tests: yarn test
     7. If compilation or tests fail, fix the issue before committing
     8. Commit each fix with a descriptive message
-    9. Push the branch only after all fixes compile and pass tests
+    9. Do not push. The workflow publishes the branch only after this process exits successfully.
 
     MANDATORY BUILD VERIFICATION:
-    - Run `npm run build` after every change
-    - Run `npx tsc --noEmit` to catch type errors
-    - Run `npm run test` to verify tests pass
+    - Run `yarn build` after every change
+    - Run `yarn tsc --noEmit` to catch type errors
+    - Run `yarn test` to verify tests pass
     - NEVER commit code that doesn't compile
-    - NEVER push a branch with failing tests
+    - NEVER commit code with failing tests
 
     Look for:
     1. Unhandled errors — any error return value ignored that could fail
@@ -40,7 +40,7 @@ prompt: |
     - What was wrong
     - What you changed
 
-    After fixing, commit and push. End with summary of fixes.
+    After fixing, commit locally and end with a summary of fixes. Do not push.
 
 mode: read_write
 

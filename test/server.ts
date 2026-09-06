@@ -47,6 +47,12 @@ describe("Server", function () {
 	const webURL = `http://${Config.values.host}:${Config.values.port}/`;
 
 	describe("Express", () => {
+		it("reports readiness after startup initialization", async () => {
+			const response = await got(webURL + "healthz");
+			expect(response.statusCode).to.equal(200);
+			expect(response.body).to.equal("ready");
+		});
+
 		it("should run a web server on " + webURL, async () => {
 			const response = await got(webURL);
 			expect(response.statusCode).to.equal(200);

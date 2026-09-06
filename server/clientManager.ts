@@ -10,12 +10,14 @@ import Config from "./config";
 import WebPush from "./plugins/webpush";
 import log from "./log";
 import {Server} from "./server";
+import {Worker} from "worker_threads";
 
 class ClientManager {
 	clients: Client[];
 	sockets!: Server;
 	identHandler: any;
 	webPush!: WebPush;
+	sqlitePreflightedUsers = new Set<string>();
 
 	constructor() {
 		this.clients = [];
@@ -28,12 +30,60 @@ class ClientManager {
 		await this.webPush.init();
 
 		if (!Config.values.public) {
+			if (Config.values.messageStorage.includes("sqlite")) {
+				await this.reconcileSqliteStorage();
+			}
+
 			this.loadUsers();
 
 			// LDAP does not have user commands, and users are dynamically
 			// created upon logon, so we don't need to watch for new files
 			if (!Config.values.ldap.enable) {
 				this.autoloadUsers();
+			}
+		}
+	}
+
+	private async reconcileSqliteStorage() {
+		const users = this.getUsers();
+		users.forEach((user) => this.sqlitePreflightedUsers.add(user));
+		const logsPath = Config.getUserLogsPath();
+
+		if (!fs.existsSync(logsPath)) {
+			return;
+		}
+
+		const databases = fs
+			.readdirSync(logsPath)
+			.filter((file) => file.endsWith(".sqlite3") && !file.endsWith(".fts.sqlite3"));
+		const compiledWorker = path.join(__dirname, "workers", "sqlite-reconcile.js");
+		const workerPath = fs.existsSync(compiledWorker)
+			? compiledWorker
+			: path.join(__dirname, "workers", "sqlite-reconcile.ts");
+
+		for (const database of databases) {
+			const userName = database.slice(0, -".sqlite3".length);
+
+			try {
+				await new Promise<void>((resolve, reject) => {
+					const worker = new Worker(workerPath, {
+						execArgv: workerPath.endsWith(".ts") ? ["--import", "tsx"] : undefined,
+						workerData: {databasePath: path.join(logsPath, database), userName},
+					});
+					worker.once("error", reject);
+					worker.once("exit", (code) =>
+						code === 0
+							? resolve()
+							: reject(new Error(`worker exited with code ${code}`))
+					);
+				});
+			} catch (error: unknown) {
+				this.sqlitePreflightedUsers.delete(userName);
+				log.error(
+					`Could not reconcile SQLite search index for ${userName}: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
 			}
 		}
 	}

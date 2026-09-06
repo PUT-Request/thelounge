@@ -196,10 +196,15 @@ module.exports = {
 	//   If you use this option, you must have a reverse proxy configured,
 	//   to correctly proxy the uploads URLs back to The Lounge.
 	//   This value is set to `null` by default.
+	// - `externalUploadOrigins`: HTTPS origins permitted for user-configurable
+	//   XBackBone upload APIs. Entries must contain only a scheme and host, for
+	//   example `"https://uploads.example.com"`. An empty list disables custom
+	//   XBackBone destinations while leaving the fixed upload providers available.
 	fileUpload: {
 		enable: false,
 		maxFileSize: 10240,
 		baseUrl: null,
+		externalUploadOrigins: [],
 	},
 
 	// ### `allowFileUploadBackendSelection`
@@ -211,15 +216,9 @@ module.exports = {
 
 	// ### `maskFileHost`
 	//
-	// Allow masking the file host with the `fileUpload.baseUrl`
-	//
-	// When set to `true` the host for uploaded files (non local) will be replaced with the
-	// `fileUpload.baseUrl` This only useful if you are proxying externally hosted files
-	// with a custom URL. You should leave this as `false` unless you know what you are doing.
-	//
-	// Example:
-	//   With `fileUpload.baseUrl` set to `my.custom.url` and using `example.com` file host
-	//   `https://img.example.com/QZNFCc.png` becomes `https://my.custom.url/QZNFCc.png`
+	// Deprecated and disabled. Rewriting an external provider URL's host cannot prove that
+	// the resulting path is served by fileUpload.baseUrl. Configure vanity URLs at the
+	// upload provider/reverse proxy itself so the provider returns an authoritative URL.
 	//
 	// This value is set to `false` by default.
 	maskFileHost: false,

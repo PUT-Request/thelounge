@@ -353,7 +353,6 @@ describe("Network", function () {
 				"znc.in/playback",
 				"extended-monitor",
 				"seedpool/enhanced",
-				"chathistory",
 				"draft/chathistory",
 				"invite-notify",
 				"userhost-in-names",
@@ -469,6 +468,15 @@ describe("Network", function () {
 			network.addChannel(newChan);
 
 			expect(network.channels.length).to.equal(3);
+		});
+
+		it("uses the negotiated CASEMAPPING for channel lookup", function () {
+			const network = new Network({channels: [new Chan({name: "#[room]"})]});
+
+			network.serverOptions.CASEMAPPING = "ascii";
+			expect(network.getChannel("#{room}")).to.be.undefined;
+			network.serverOptions.CASEMAPPING = "rfc1459";
+			expect(network.getChannel("#{room}")?.name).to.equal("#[room]");
 		});
 
 		it("should add channel alphabetically", function () {

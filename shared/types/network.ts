@@ -1,4 +1,5 @@
 import {SharedChan} from "./chan";
+import type {IrcCaseMapping} from "../irc";
 
 export type SharedPrefixObject = {
 	symbol: string;
@@ -17,6 +18,7 @@ export type SharedPrefix = {
 
 export type SharedServerOptions = {
 	CHANTYPES: string[];
+	CASEMAPPING: IrcCaseMapping;
 	PREFIX: SharedPrefix;
 	NETWORK: string;
 	supportsReply: boolean;

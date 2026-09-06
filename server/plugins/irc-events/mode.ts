@@ -55,7 +55,7 @@ export default <IrcEventHandler>function (irc, network) {
 	irc.on("mode", function (data) {
 		let targetChan;
 
-		if (data.target === irc.user.nick) {
+		if (network.casefold(data.target) === network.casefold(irc.user.nick)) {
 			targetChan = network.getLobby();
 		} else {
 			targetChan = network.getChannel(data.target);
@@ -70,7 +70,7 @@ export default <IrcEventHandler>function (irc, network) {
 			type: MessageType.MODE,
 			from: targetChan.getUser(data.nick),
 			text: `${data.raw_modes} ${data.raw_params.join(" ")}`,
-			self: data.nick === irc.user.nick,
+			self: network.casefold(data.nick) === network.casefold(irc.user.nick),
 		});
 
 		const users: string[] = [];

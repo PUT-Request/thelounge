@@ -243,7 +243,12 @@ export default defineComponent({
 				return true;
 			}
 
-			return new Date(previousMessage.time).getDay() !== new Date(message.time).getDay();
+			const dayKey = (value: Date | string) => {
+				const date = new Date(value);
+				return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+			};
+
+			return dayKey(previousMessage.time) !== dayKey(message.time);
 		};
 
 		const clearSearchState = () => {
@@ -300,9 +305,7 @@ export default defineComponent({
 				// Same search session as before (e.g. jumped to a message and came
 				// back) - resume instead of re-querying the server.
 				offset.value = cached.query.offset;
-				moreResultsAvailable.value = !!(
-					cached.results.length && !(cached.results.length % 100)
-				);
+				moreResultsAvailable.value = cached.hasMore;
 				void restoreScroll(cached.scrollTop);
 				return;
 			}
@@ -446,9 +449,7 @@ export default defineComponent({
 		);
 
 		watch(messages, async () => {
-			moreResultsAvailable.value = !!(
-				messages.value.length && !(messages.value.length % 100)
-			);
+			moreResultsAvailable.value = store.state.messageSearchResults?.hasMore ?? false;
 
 			if (!offset.value) {
 				await jumpToBottom();

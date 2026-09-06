@@ -7,7 +7,7 @@ export default <IrcEventHandler>function (irc, network) {
 	const client = this;
 
 	irc.on("tagmsg", function (data) {
-		if (data.nick === irc.user.nick) {
+		if (network.casefold(data.nick) === network.casefold(irc.user.nick)) {
 			return;
 		}
 
@@ -27,7 +27,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 		let target = data.target;
 
-		if (target.toLowerCase() === irc.user.nick.toLowerCase()) {
+		if (network.casefold(target) === network.casefold(irc.user.nick)) {
 			target = data.nick;
 		}
 

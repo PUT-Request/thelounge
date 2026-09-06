@@ -38,6 +38,20 @@ export function normalizeAccountName(account: unknown): string | undefined {
 	return typeof account === "string" && account !== "" && account !== "*" ? account : undefined;
 }
 
+export type IrcCaseMapping = "ascii" | "strict-rfc1459" | "rfc1459";
+
+export function ircCasefold(value: string, mapping: string = "rfc1459"): string {
+	const lowered = value.toLowerCase();
+
+	if (mapping === "ascii") {
+		return lowered;
+	}
+
+	const strict = lowered.replaceAll("[", "{").replaceAll("]", "}").replaceAll("\\", "|");
+
+	return mapping === "strict-rfc1459" ? strict : strict.replace(/\^/g, "~");
+}
+
 export const condensedTypes = new Set([
 	"away",
 	"back",

@@ -7,7 +7,7 @@ import Helper from "../../helper";
 import Config from "../../config";
 import {MessageType} from "../../../shared/types/msg";
 import {ChanType, ChanState} from "../../../shared/types/chan";
-import {isChathistoryAvailable} from "./chathistory";
+import {cleanupHistoryFetches, isChathistoryAvailable} from "./chathistory";
 
 // https://ircv3.net/specs/extensions/monitor — RPL_ISUPPORT MONITOR token.
 // null = unsupported, 0 = supported with no limit, N>0 = supported with limit.
@@ -37,6 +37,24 @@ export default <IrcEventHandler>function (irc, network) {
 	// Registration completes on RPL_WELCOME, before RPL_ISUPPORT tells us whether
 	// this server supports MONITOR, so the initial sync waits for whichever is last.
 	let monitorSyncPending = false;
+	const registrationTimers = new Set<ReturnType<typeof setTimeout>>();
+
+	function clearRegistrationTimers() {
+		for (const timer of registrationTimers) {
+			clearTimeout(timer);
+		}
+
+		registrationTimers.clear();
+	}
+
+	function scheduleRegistrationTask(callback: () => void, delay: number) {
+		const timer = setTimeout(() => {
+			registrationTimers.delete(timer);
+			callback();
+		}, delay);
+		registrationTimers.add(timer);
+		timer.unref();
+	}
 
 	function syncMonitorList() {
 		if (!monitorSyncPending || network.serverOptions.MONITOR === null) {
@@ -59,6 +77,8 @@ export default <IrcEventHandler>function (irc, network) {
 	);
 
 	irc.on("registered", function () {
+		clearRegistrationTimers();
+
 		if (network.irc.network.cap.enabled.length > 0) {
 			network.getLobby().pushMessage(
 				client,
@@ -81,7 +101,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 		if (Array.isArray(network.commands)) {
 			network.commands.forEach((cmd) => {
-				setTimeout(function () {
+				scheduleRegistrationTask(function () {
 					client.input({
 						target: network.getLobby().id,
 						text: cmd,
@@ -96,7 +116,7 @@ export default <IrcEventHandler>function (irc, network) {
 				return;
 			}
 
-			setTimeout(function () {
+			scheduleRegistrationTask(function () {
 				network.irc.join(chan.name, chan.key);
 			}, delay);
 			delay += 1000;
@@ -145,6 +165,9 @@ export default <IrcEventHandler>function (irc, network) {
 	});
 
 	irc.on("socket close", function (error) {
+		clearRegistrationTimers();
+		cleanupHistoryFetches(network);
+
 		if (identSocketId > 0) {
 			client.manager.identHandler.removeSocket(identSocketId);
 			identSocketId = 0;
@@ -159,6 +182,7 @@ export default <IrcEventHandler>function (irc, network) {
 
 		network.channels.forEach((chan) => {
 			chan.users = new Map();
+			chan.groups = [];
 			chan.state = ChanState.PARTED;
 
 			if (chan.type === ChanType.QUERY) {
@@ -212,12 +236,24 @@ export default <IrcEventHandler>function (irc, network) {
 
 	if (Config.values.debug.raw) {
 		irc.on("raw", function (message) {
+			let line = message.line;
+
+			if (!message.from_server) {
+				if (/^PASS(?:\s|$)/i.test(line)) {
+					line = "PASS [REDACTED]";
+				} else if (/^WEBIRC(?:\s|$)/i.test(line)) {
+					line = "WEBIRC [REDACTED]";
+				} else if (/^AUTHENTICATE\s+(?!\+$)/i.test(line)) {
+					line = "AUTHENTICATE [REDACTED]";
+				}
+			}
+
 			network.getLobby().pushMessage(
 				client,
 				new Msg({
 					self: !message.from_server,
 					type: MessageType.RAW,
-					text: message.line,
+					text: line,
 				}),
 				true
 			);
@@ -258,6 +294,12 @@ export default <IrcEventHandler>function (irc, network) {
 	});
 
 	irc.on("server options", function (data) {
+		network.serverOptions.CASEMAPPING = data.options.CASEMAPPING ?? "rfc1459";
+
+		for (const chan of network.channels) {
+			chan.setCaseMapping(network.serverOptions.CASEMAPPING);
+		}
+
 		network.serverOptions.PREFIX.update(data.options.PREFIX);
 
 		if (data.options.CHANTYPES) {

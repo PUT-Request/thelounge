@@ -168,7 +168,7 @@ interface ClientToServerEvents {
 
 	input: EventHandler<{target: number; text: string; replyTo?: string}>;
 
-	"upload:auth": NoPayloadEventHandler;
+	"upload:auth": EventHandler<{service: string}>;
 	"upload:ping": (token: string) => void;
 
 	"mute:change": EventHandler<{target: number; setMutedTo: boolean}>;

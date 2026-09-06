@@ -73,5 +73,10 @@ Settings -> General -> File uploads (requires `fileUpload.enable` plus
   seconds, or never), swept hourly.
 - Relay backends: ImageBB, catbox, Uguu, qu.ax, ptpimg, OnlyImage,
   XBackBone and others, each with API key / custom URL / TTL pickers.
-- `maskFileHost` rewrites externally hosted URLs through
-  `fileUpload.baseUrl` for vanity/proxied setups.
+  Relay requests use authenticated, single-use upload capabilities; API
+  credentials are carried in the request body instead of the URL. XBackBone
+  additionally requires its HTTPS origin in
+  `fileUpload.externalUploadOrigins`; redirects and private-network targets
+  are rejected.
+- `maskFileHost` is deprecated and disabled. Configure a vanity URL at
+  the provider/reverse proxy so the provider returns the URL it actually serves.

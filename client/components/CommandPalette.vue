@@ -8,22 +8,34 @@
 				class="input"
 				placeholder="Type a channel, command, or action…"
 				aria-label="Quick switcher search"
+				role="combobox"
+				aria-controls="command-palette-results"
+				:aria-expanded="results.length > 0"
+				:aria-activedescendant="activeOptionId"
 				autocomplete="off"
 				spellcheck="false"
 				@keydown.down.prevent="moveActive(1)"
 				@keydown.up.prevent="moveActive(-1)"
 				@keydown.enter.prevent="selectActive"
 				@keydown.esc="close"
+				@keydown.tab.prevent="paletteInput?.focus()"
 			/>
-			<div v-if="results.length" class="palette-results" role="listbox">
+			<div
+				v-if="results.length"
+				id="command-palette-results"
+				class="palette-results"
+				role="listbox"
+			>
 				<div
 					v-for="(item, index) in results"
+					:id="optionId(index)"
 					:key="
 						item.kind + ':' + (item.chanId ?? item.command ?? item.route ?? item.title)
 					"
 					:ref="(el) => setRowRef(el as HTMLElement, index)"
 					:class="['palette-item', {active: index === activeIndex}]"
 					role="option"
+					tabindex="-1"
 					:aria-selected="index === activeIndex"
 					@click="select(item)"
 					@mousemove="activeIndex = index"
@@ -151,7 +163,7 @@
 </style>
 
 <script lang="ts">
-import {computed, defineComponent, nextTick, onMounted, ref, watch} from "vue";
+import {computed, defineComponent, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {useRouter} from "vue-router";
 import constants from "../js/constants";
 import eventbus from "../js/eventbus";
@@ -170,6 +182,7 @@ export default defineComponent({
 		const activeIndex = ref(0);
 		const paletteInput = ref<HTMLInputElement | null>(null);
 		const rowRefs = ref<(HTMLElement | null)[]>([]);
+		let previouslyFocused: HTMLElement | null = null;
 
 		const items = computed(() =>
 			buildPaletteItems({
@@ -179,6 +192,10 @@ export default defineComponent({
 		);
 
 		const results = computed(() => filterPaletteItems(query.value, items.value));
+		const optionId = (index: number) => `command-palette-option-${index}`;
+		const activeOptionId = computed(() =>
+			results.value.length > 0 ? optionId(activeIndex.value) : undefined
+		);
 
 		const close = () => emit("close");
 
@@ -202,7 +219,7 @@ export default defineComponent({
 		const kindLabel = (kind: PaletteItem["kind"]) =>
 			kind === "channel" ? "channel" : kind === "command" ? "command" : "go to";
 
-		const select = (item: PaletteItem) => {
+		const select = async (item: PaletteItem) => {
 			if (item.kind === "channel" && item.chanId !== undefined) {
 				const found = store.getters.findChannel(item.chanId);
 
@@ -210,6 +227,17 @@ export default defineComponent({
 					switchToChannel(found.channel);
 				}
 			} else if (item.kind === "command" && item.command) {
+				const active = store.state.activeChannel?.channel;
+
+				if (!active) {
+					return;
+				}
+
+				if (router.currentRoute.value.name !== "RoutedChat") {
+					await router.push({name: "RoutedChat", params: {id: active.id}});
+					await nextTick();
+				}
+
 				eventbus.emit("chatinput:prefill", {text: `${item.command} `});
 			} else if (item.route) {
 				router.push(item.route).catch(() => {
@@ -226,7 +254,7 @@ export default defineComponent({
 			const item = results.value[activeIndex.value];
 
 			if (item) {
-				select(item);
+				void select(item);
 			}
 		};
 
@@ -241,7 +269,12 @@ export default defineComponent({
 		});
 
 		onMounted(() => {
+			previouslyFocused = document.activeElement as HTMLElement | null;
 			paletteInput.value?.focus();
+		});
+
+		onBeforeUnmount(() => {
+			previouslyFocused?.focus();
 		});
 
 		return {
@@ -249,6 +282,8 @@ export default defineComponent({
 			activeIndex,
 			paletteInput,
 			results,
+			activeOptionId,
+			optionId,
 			close,
 			setRowRef,
 			moveActive,

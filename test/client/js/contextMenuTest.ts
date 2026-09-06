@@ -7,7 +7,10 @@ vi.mock("../../../client/js/router", () => ({
 	switchToChannel() {},
 }));
 
-import {generateUserContextMenu} from "../../../client/js/helpers/contextMenu";
+import {
+	generateChannelContextMenu,
+	generateUserContextMenu,
+} from "../../../client/js/helpers/contextMenu";
 import {ChanType} from "../../../shared/types/chan";
 
 function setup(
@@ -114,5 +117,41 @@ describe("generateUserContextMenu", function () {
 
 		expect(tracker).to.exist;
 		expect(tracker.class).to.equal("action-open");
+	});
+});
+
+describe("generateChannelContextMenu", function () {
+	it("hides query-only enhanced actions in classic mode", function () {
+		const torrentSite = {profileUrl: "https://tracker.example/users/", disabled: false};
+		const {store, channel, network} = setup(
+			[],
+			{name: "bob", type: ChanType.QUERY, torrentSite, pinned: false},
+			{enhancedContextMenuEnabled: false}
+		);
+
+		const labels = generateChannelContextMenu(store, channel, network).flatMap((item) =>
+			"label" in item ? [item.label] : []
+		);
+
+		expect(labels).not.to.include("Tracker Profile");
+		expect(labels).not.to.include("Pin conversation");
+		expect(labels).to.include("User information");
+	});
+
+	it("shows query-only enhanced actions in enhanced mode", function () {
+		const torrentSite = {profileUrl: "https://tracker.example/users/", disabled: false};
+		const {store, channel, network} = setup([], {
+			name: "bob",
+			type: ChanType.QUERY,
+			torrentSite,
+			pinned: false,
+		});
+
+		const labels = generateChannelContextMenu(store, channel, network).flatMap((item) =>
+			"label" in item ? [item.label] : []
+		);
+
+		expect(labels).to.include("Tracker Profile");
+		expect(labels).to.include("Pin conversation");
 	});
 });

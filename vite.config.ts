@@ -64,6 +64,8 @@ export default defineConfig(({mode}) => ({
 		outDir: path.resolve(__dirname, "public"),
 		emptyOutDir: true,
 		sourcemap: true,
+		// primer-tooltips contains an old IE media-query hack that Lightning CSS rejects.
+		cssMinify: "esbuild",
 		rollupOptions: {
 			output: {
 				manualChunks: (id) => {

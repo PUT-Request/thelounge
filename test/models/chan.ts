@@ -63,6 +63,16 @@ describe("Chan", function () {
 
 			expect(user.mode).to.equal("@");
 		});
+
+		it("rekeys existing users when CASEMAPPING changes", function () {
+			const chan = new Chan({caseMapping: "ascii"});
+			const user = new User({nick: "Nick["});
+			chan.setUser(user);
+
+			expect(chan.findUser("nick{")).to.be.undefined;
+			chan.setCaseMapping("rfc1459");
+			expect(chan.findUser("nick{")).to.equal(user);
+		});
 	});
 
 	describe("#getUser(nick)", function () {
@@ -219,6 +229,7 @@ describe("Chan", function () {
 				"closed",
 				"data",
 				"pinned",
+				"caseMapping",
 				"groups",
 				"torrentSite"
 			);

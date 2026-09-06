@@ -30,8 +30,10 @@ Log in at http://localhost:9000 and add your IRC networks.
 - **Data volume**: everything lives under `/home/lounge/data` in the
   container (`config.js`, `users/`, `logs/` with the SQLite message
   databases, uploads). Back up this volume and you can restore anywhere.
-- **Healthcheck**: polls `/` every 30 s; unhealthy containers get restarted
-  by `restart: unless-stopped` setups and visible status in `docker ps`.
+- **Healthcheck**: polls `/healthz` every 30 s. It reports healthy only after
+  users, storage, and Web Push initialization complete. Docker exposes the
+  status in `docker ps`; a restart policy alone does not restart a process
+  merely because its health status changed.
 
 ## Manual build and run
 
@@ -99,7 +101,9 @@ If the proxy sets `X-Forwarded-For`/`X-Forwarded-Proto`, enable
 ## Updates
 
 Published images are rebuilt from `master` on every push
-(`.github/workflows/docker.yml`, tags `latest` + branch/tag names):
+(`.github/workflows/docker.yml`, tags `latest` + branch/tag names). To use
+one, comment out `build: .` and uncomment the matching `image:` line in
+`docker-compose.yml`, then run:
 
 ```sh
 docker compose pull   # if using ghcr.io/PUT-Request/thelounge
@@ -120,13 +124,20 @@ roll back the image, since message-database migrations are additive.
 
 ## Backups
 
+Do not archive a live SQLite volume: a filesystem copy can catch database
+and journal files at different points in a transaction. Quiesce the
+container for the copy:
+
 ```sh
+docker compose stop thelounge
 docker run --rm -v thelounge-data:/data -v "$PWD":/backup \
   alpine tar czf /backup/thelounge-$(date +%F).tar.gz -C /data .
+docker compose start thelounge
 ```
 
 Back up `config.js` and `logs/*.sqlite3` at minimum; uploads and packages
-are nice to have.
+are nice to have. Verify that the archive lists and extracts successfully
+before treating it as a recovery point.
 
 ## Migrating a bare-metal install
 

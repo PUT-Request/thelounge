@@ -1,6 +1,7 @@
 import {SharedMsg} from "./msg";
 import {SharedUser} from "./user";
 import {SharedNetworkChan} from "./network";
+import type {IrcCaseMapping} from "../irc";
 
 // User groups sent by seedpool/enhanced capable servers
 export type UserGroup = {
@@ -59,6 +60,7 @@ export type SharedChan = {
 	type: ChanType;
 	state: ChanState;
 	pinned: boolean;
+	caseMapping?: IrcCaseMapping;
 
 	isOnline?: boolean | null;
 	userAway?: string | null;

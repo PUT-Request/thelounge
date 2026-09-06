@@ -46,7 +46,19 @@ describe("BBCode parser", () => {
 		expect(
 			getParsedMessageContents("[quote][url=https://thelounge.chat]thelounge[/url][/quote]")
 		).to.equal(
-			'<blockquote class="bbcode-quote"><a href="https://thelounge.chat" dir="auto" target="_blank" rel="noopener">thelounge</a></blockquote>'
+			'<blockquote class="bbcode-quote"><a href="https://thelounge.chat/" dir="auto" target="_blank" rel="noopener noreferrer">thelounge</a></blockquote>'
+		);
+	});
+
+	it("renders unsafe URL schemes as plain text", () => {
+		const html = getParsedMessageContents("[url=javascript:alert(1)]do not run[/url]");
+		expect(html).to.equal("do not run");
+		expect(html).to.not.contain("href");
+	});
+
+	it("allows mailto links", () => {
+		expect(getParsedMessageContents("[url=mailto:test@example.org]mail[/url]")).to.equal(
+			'<a href="mailto:test@example.org" dir="auto" target="_blank" rel="noopener noreferrer">mail</a>'
 		);
 	});
 

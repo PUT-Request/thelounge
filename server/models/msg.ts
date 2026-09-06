@@ -71,6 +71,10 @@ class Msg {
 						copy.hostname = source.hostname;
 					}
 
+					if (source.isBot === true) {
+						copy.isBot = true;
+					}
+
 					this[prop] = copy;
 				}
 			});

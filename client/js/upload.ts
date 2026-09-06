@@ -8,6 +8,7 @@ class Uploader {
 	xhr: XMLHttpRequest | null = null;
 	fileQueue: File[] = [];
 	tokenKeepAlive: ReturnType<typeof setTimeout> | null = null;
+	pendingService = "new";
 
 	overlay: HTMLDivElement | null = null;
 	uploadProgressbar: HTMLSpanElement | null = null;
@@ -19,7 +20,7 @@ class Uploader {
 	onPaste = (e: ClipboardEvent) => this.paste(e);
 
 	init() {
-		socket.on("upload:auth", (token) => this.uploadNextFileInQueue(token));
+		socket.on("upload:auth", (token) => this.uploadNextFileInQueue(token, this.pendingService));
 	}
 
 	mounted() {
@@ -128,7 +129,7 @@ class Uploader {
 
 		for (const file of files) {
 			if (!file) {
-				return;
+				continue;
 			}
 
 			if (maxFileSize > 0 && file.size > maxFileSize) {
@@ -150,7 +151,12 @@ class Uploader {
 	}
 
 	requestToken() {
-		socket.emit("upload:auth");
+		const service = store.state.serverConfiguration?.allowFileUploadBackendSelection
+			? (store.state.settings.uploadTo ?? "new")
+			: "new";
+
+		this.pendingService = service;
+		socket.emit("upload:auth", {service});
 	}
 
 	setProgress(value: number) {
@@ -162,7 +168,7 @@ class Uploader {
 		this.uploadProgressbar.style.width = `${value}%`;
 	}
 
-	uploadNextFileInQueue(token: string) {
+	uploadNextFileInQueue(token: string, service: string) {
 		const file = this.fileQueue.shift();
 
 		if (!file) {
@@ -181,9 +187,9 @@ class Uploader {
 			!file.type.includes("svg") &&
 			file.type !== "image/gif"
 		) {
-			this.renderImage(file, (newFile) => this.performUpload(token, newFile));
+			this.renderImage(file, (newFile) => this.performUpload(token, service, newFile));
 		} else {
-			this.performUpload(token, file);
+			this.performUpload(token, service, file);
 		}
 	}
 
@@ -211,7 +217,7 @@ class Uploader {
 				ctx.drawImage(img, 0, 0);
 
 				canvas.toBlob((blob) => {
-					callback(new File([blob!], file.name));
+					callback(blob ? new File([blob], file.name) : file);
 				}, file.type);
 			};
 
@@ -226,22 +232,12 @@ class Uploader {
 		fileReader.readAsDataURL(file);
 	}
 
-	performUpload(token: string, file: File) {
-		const uploadEndpoint = store.state.serverConfiguration?.allowFileUploadBackendSelection
-			? store.state.settings.uploadTo
-			: "new";
-		const uploadProvider = UploadProviders.find((b) => b.id === uploadEndpoint)!;
+	performUpload(token: string, uploadEndpoint: string, file: File) {
+		const uploadProvider = UploadProviders.find((provider) => provider.id === uploadEndpoint);
 
-		// if not using local uploads set the token to user given api token
-		if (uploadProvider.id !== "new") {
-			token = token ? token : `_${uploadEndpoint}_`;
-
-			if (uploadProvider.requiresURL) {
-				// if needing to pass url for upload prepend it to the token
-				token = `${btoa(store.state.settings.uploadURL)}_|_${store.state.settings.uploadToken}`;
-			} else {
-				token = store.state.settings.uploadToken;
-			}
+		if (!uploadProvider) {
+			this.handleResponse({error: "Invalid upload provider"});
+			return;
 		}
 
 		// The "custom" TTL option has no fixed duration of its own; substitute
@@ -291,7 +287,21 @@ class Uploader {
 
 		const formData = new FormData();
 		formData.append("file", file);
-		this.xhr.open("POST", `uploads/${uploadEndpoint}/${token}${ttl ? `/${ttl}` : ""}`);
+
+		if (uploadProvider.requiresToken) {
+			formData.append("providerToken", store.state.settings.uploadToken ?? "");
+		}
+
+		if (uploadProvider.requiresURL) {
+			formData.append("providerUrl", store.state.settings.uploadURL ?? "");
+		}
+
+		this.xhr.open(
+			"POST",
+			`uploads/${encodeURIComponent(uploadEndpoint)}/${encodeURIComponent(token)}${
+				ttl ? `/${encodeURIComponent(ttl)}` : ""
+			}`
+		);
 		this.xhr.send(formData);
 	}
 

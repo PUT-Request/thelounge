@@ -11,7 +11,12 @@
 			class="channel-list-item dm-section-header"
 			:class="hasUnread ? 'has-unread has-highlight' : ''"
 			:title="'Total Queries: ' + queries.length + ' - Total Unread: ' + totalUnreadCount"
+			role="button"
+			tabindex="0"
+			:aria-expanded="!isCollapsed"
 			@click.stop="toggleCollapsed"
+			@keydown.enter.stop="toggleCollapsed"
+			@keydown.space.prevent.stop="toggleCollapsed"
 		>
 			<span class="dm-collapse-icon" :class="{'is-collapsed': isCollapsed}"></span>
 			<span class="dm-section-title">Direct Messages</span>
@@ -30,12 +35,13 @@
 					v-model="filterText"
 					type="text"
 					placeholder="Filter DMs..."
+					aria-label="Filter direct messages"
 					class="dm-filter-input input"
 				/>
 			</div>
 
 			<Draggable
-				:list="sortedQueries"
+				:list="visibleQueries"
 				:delay="500"
 				:delay-on-touch-only="true"
 				:touch-start-threshold="10"
@@ -70,7 +76,12 @@
 			<div
 				v-if="hasHiddenChannels"
 				class="channel-list-item dm-show-more"
+				role="button"
+				tabindex="0"
+				:aria-expanded="showAll"
 				@click="showAll = !showAll"
+				@keydown.enter="showAll = !showAll"
+				@keydown.space.prevent="showAll = !showAll"
 			>
 				{{ showAll ? "Show less" : `Show ${hiddenCount} more...` }}
 			</div>
@@ -194,6 +205,7 @@ import socket from "../js/socket";
 import {ClientChan, ClientNetwork} from "../js/types";
 import {useStore} from "../js/store";
 import roundBadgeNumber from "../js/helpers/roundBadgeNumber";
+import {parseCollapsedDirectMessages, reorderDirectMessages} from "../js/directMessages";
 
 export default defineComponent({
 	name: "DirectMessageSection",
@@ -214,12 +226,10 @@ export default defineComponent({
 	setup(props) {
 		const uuid = props.network.uuid + "-dms";
 		const PERSISTENT_STORAGE = "thelounge.directMessages.collapsed";
+		const readCollapsed = () => parseCollapsedDirectMessages(storage.get(PERSISTENT_STORAGE));
 
 		const getIsCollapsed = () => {
-			const stored = storage.get(PERSISTENT_STORAGE);
-			const directMessages = stored ? new Set(JSON.parse(stored)) : new Set();
-
-			return directMessages.has(uuid);
+			return readCollapsed().has(uuid);
 		};
 
 		const store = useStore();
@@ -261,18 +271,14 @@ export default defineComponent({
 		const sortedQueries = computed(() => {
 			const queries = [...filteredQueries.value];
 
-			// Sort: pinned first, then by unread, then by name
+			// Preserve the canonical server channel order so drag-and-drop has a
+			// stable order to update. Pinned conversations remain first.
 			return queries.sort((a, b) => {
 				// Pinned always first
 				if (a.pinned && !b.pinned) return -1;
 				if (!a.pinned && b.pinned) return 1;
 
-				// Then by unread status
-				if (a.unread > 0 && b.unread === 0) return -1;
-				if (a.unread === 0 && b.unread > 0) return 1;
-
-				// Then alphabetically
-				return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+				return props.network.channels.indexOf(a) - props.network.channels.indexOf(b);
 			});
 		});
 
@@ -304,8 +310,9 @@ export default defineComponent({
 		});
 
 		const shouldShowChannel = (channel: ClientChan) => {
-			if (isCollapsed.value && channel.highlight) return true;
-			if (isCollapsed.value && !channel.highlight) return false;
+			if (isCollapsed.value) {
+				return channel.unread > 0 || channel.id === store.state.activeChannel?.channel.id;
+			}
 
 			return visibleQueries.value.includes(channel);
 		};
@@ -313,8 +320,7 @@ export default defineComponent({
 		const toggleCollapsed = () => {
 			isCollapsed.value = !isCollapsed.value;
 
-			const stored = storage.get(PERSISTENT_STORAGE);
-			const directMessages = stored ? new Set(JSON.parse(stored)) : new Set();
+			const directMessages = readCollapsed();
 
 			if (isCollapsed.value) {
 				directMessages.add(uuid);
@@ -332,10 +338,21 @@ export default defineComponent({
 				return;
 			}
 
-			// Emit sort event to server
+			const order = reorderDirectMessages(
+				props.network.channels,
+				props.queries,
+				visibleQueries.value,
+				oldIndex,
+				newIndex
+			);
+
+			if (!order) {
+				return;
+			}
+
 			socket.emit("sort:channels", {
 				network: props.network.uuid,
-				order: props.network.channels.map((c) => c.id),
+				order,
 			});
 		};
 
@@ -348,6 +365,7 @@ export default defineComponent({
 			hasUnread,
 			totalUnreadCount,
 			sortedQueries,
+			visibleQueries,
 			hiddenCount,
 			hasActiveQuery,
 			hasHiddenChannels,

@@ -49,8 +49,8 @@ export default <IrcEventHandler>function (irc, network) {
 				// Ignore echoed ctcp requests that aren't targeted at us
 				// See https://github.com/kiwiirc/irc-framework/issues/225
 				if (
-					data.nick === irc.user.nick &&
-					data.nick !== data.target &&
+					network.casefold(data.nick) === network.casefold(irc.user.nick) &&
+					network.casefold(data.nick) !== network.casefold(data.target) &&
 					network.irc.network.cap.isEnabled("echo-message")
 				) {
 					return;

@@ -7,6 +7,18 @@ export default <IrcEventHandler>function (irc, network) {
 	const client = this;
 
 	irc.on("unknown command", function (command) {
+		if (
+			command.command === "CHATHISTORY" &&
+			command.batch?.type === "draft/chathistory-targets" &&
+			command.params?.[0] === "TARGETS"
+		) {
+			return;
+		}
+
+		if (command.command === "SPGROUPS" || command.command === "SPJOIN") {
+			return;
+		}
+
 		let target = network.getLobby();
 
 		// Do not display users own name

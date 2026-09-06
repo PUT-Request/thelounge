@@ -94,8 +94,10 @@ class MassEventAggregator {
 					`MassEvent: ACTIVATING for ${chan.name} (${state.recentTimestamps.length} msgs, ${state.preBuffer.length} in preBuffer)`
 				);
 
-				// Move preBuffer to main buffer when activating
-				state.buffer = [...state.preBuffer];
+				// Earlier pre-threshold messages were already delivered normally and
+				// must not also be counted in the summary. Start aggregation with the
+				// threshold-crossing message only.
+				state.buffer = [{msg, timestamp: now}];
 				state.preBuffer = [];
 
 				this.activateMassEvent(state, chan, network, now);
@@ -143,6 +145,7 @@ class MassEventAggregator {
 		state.maxDurationTimer = setTimeout(() => {
 			this.endMassEvent(state, chan, network);
 		}, config.maxDurationMs);
+		state.maxDurationTimer.unref();
 	}
 
 	private resetCooldownTimer(state: ChannelMassEventState, chan: Chan, network: Network): void {
@@ -155,6 +158,7 @@ class MassEventAggregator {
 		state.cooldownTimer = setTimeout(() => {
 			this.endMassEvent(state, chan, network);
 		}, config.cooldownMs);
+		state.cooldownTimer.unref();
 	}
 
 	private endMassEvent(state: ChannelMassEventState, chan: Chan, network: Network): void {
