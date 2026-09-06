@@ -230,6 +230,14 @@ const deleteIdChunkSize = 500;
 // path instead of a full rebuild. A mismatch means something was deleted
 // (or otherwise changed) within the already-indexed range, which can only
 // be safely recovered by a full rescan.
+/**
+ * Decides whether the FTS sidecar needs a cheap append or a full rebuild.
+ *
+ * Pure and total: no I/O and never throws, safe to call concurrently.
+ *
+ * @param counts Row counts describing main vs sidecar state.
+ * @returns Sync plan with the row id to resume from.
+ */
 export function computeSidecarSyncPlan(counts: SidecarSyncCounts): SidecarSyncPlan {
 	if (counts.prefixCount !== counts.ftsCount) {
 		return {action: "rebuild", fromId: 0};
@@ -1276,11 +1284,32 @@ function uniqueMatchTokens(term: string): string[] {
 	return [...new Set(tokens)];
 }
 
-// Map one stored row to a Message, re-attaching its stable row id so the
-// result can later be jumped to by storageId. Session ids still come from
-// nextID (rowids collide with live session ids, which both start at 1).
+/**
+ * Maps one stored row to a Message, re-attaching its stable row id so the
+ * result can later be jumped to by storageId. Session ids still come from
+ * nextID (rowids collide with live session ids, which both start at 1).
+ *
+ * Throws on corrupt rows: callers (getMessages/search/getMessagesAround)
+ * intentionally let this propagate so a corrupt row surfaces instead of
+ * silently returning partial history.
+ *
+ * @param row Raw storage row.
+ * @param nextID Allocator for session message ids.
+ * @returns Parsed message with storageId attached.
+ */
 function parseStoredRow(row: StoredRow, nextID: () => number): Message {
-	const msg = JSON.parse(row.msg);
+	let msg: any;
+
+	try {
+		msg = JSON.parse(row.msg);
+	} catch (e) {
+		log.error(`Failed to parse stored message id=${row.id}: ${String(e)}`);
+		throw e instanceof Error ? e : new Error(String(e));
+	}
+
+	if (typeof msg !== "object" || msg === null) {
+		throw new Error(`Corrupt stored message id=${row.id}: expected an object`);
+	}
 	msg.time = row.time;
 	msg.type = row.type;
 
@@ -1303,10 +1332,26 @@ function parseStoredRow(row: StoredRow, nextID: () => number): Message {
 	return newMsg;
 }
 
+/**
+ * Returns pending main-schema migrations newer than `since`.
+ *
+ * Pure and total: never throws for any numeric input.
+ *
+ * @param since Applied schema version.
+ * @returns Migrations that still need to run.
+ */
 export function necessaryMigrations(since: number): Migration[] {
 	return migrations.filter((m) => m.version > since);
 }
 
+/**
+ * Returns rollback records for migrations newer than `since`.
+ *
+ * Pure and total: never throws for any numeric input.
+ *
+ * @param since Applied schema version.
+ * @returns Rollback entries recorded after `since`.
+ */
 export function newRollbacks(since: number): Rollback[] {
 	return rollbacks.filter((r) => r.version > since);
 }

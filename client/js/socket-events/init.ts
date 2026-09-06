@@ -56,9 +56,31 @@ socket.on("init", async function (data) {
 	}
 });
 
-function mergeNetworkData(newNetworks: SharedNetwork[]): ClientNetwork[] {
+/**
+ * Reads the set of collapsed network UUIDs from local storage.
+ *
+ * Never throws: corrupted JSON degrades to an empty set so one bad
+ * value cannot break the init merge.
+ *
+ * @returns Set of collapsed network UUIDs.
+ */
+function readCollapsedNetworks(): Set<string> {
 	const stored = storage.get("thelounge.networks.collapsed");
-	const collapsedNetworks = stored ? new Set(JSON.parse(stored)) : new Set();
+
+	if (!stored) {
+		return new Set();
+	}
+
+	try {
+		const parsed: unknown = JSON.parse(stored);
+		return new Set(Array.isArray(parsed) ? parsed : []);
+	} catch {
+		return new Set();
+	}
+}
+
+function mergeNetworkData(newNetworks: SharedNetwork[]): ClientNetwork[] {
+	const collapsedNetworks = readCollapsedNetworks();
 	const result: ReturnType<typeof mergeNetworkData> = [];
 
 	for (const sharedNet of newNetworks) {

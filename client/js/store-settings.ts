@@ -4,6 +4,17 @@ import {config, createState} from "./settings";
 import {Store} from "vuex";
 import {State} from "./store";
 
+/**
+ * Creates the namespaced `settings` Vuex module.
+ *
+ * State is seeded from validated defaults merged with localStorage, so a
+ * corrupt stored payload can never crash store creation. Settings writes are
+ * the one place where concurrent `update` dispatches can interleave, which is
+ * why persistence serializes the already-committed state snapshot.
+ *
+ * @param store Root Vuex store the settings module is attached to.
+ * @returns Vuex module definition for client settings.
+ */
 export function createSettingsStore(store: Store<State>) {
 	return {
 		namespaced: true,
@@ -22,7 +33,10 @@ export function createSettingsStore(store: Store<State>) {
 				store.commit("serverHasSettings", true);
 
 				for (const name in state) {
-					if (config[name].sync !== "never" || config[name].sync === "always") {
+					if (
+						Object.hasOwn(config, name) &&
+						(config[name].sync !== "never" || config[name].sync === "always")
+					) {
 						socket.emit("setting:set", {name, value: state[name]});
 					}
 				}
@@ -52,8 +66,18 @@ export function createSettingsStore(store: Store<State>) {
 				}
 
 				commit("set", {name, value});
-				storage.set("settings", JSON.stringify(state));
-				settingConfig.apply(store, value);
+
+				try {
+					storage.set("settings", JSON.stringify(state));
+				} catch {
+					// Storage full or blocked: in-memory state is still updated.
+				}
+
+				try {
+					settingConfig.apply(store, value);
+				} catch {
+					// A throwing apply() must not break the settings mutation above.
+				}
 
 				if (!sync) {
 					return;
@@ -70,22 +94,41 @@ export function createSettingsStore(store: Store<State>) {
 	};
 }
 
-function loadFromLocalStorage() {
+/**
+ * Loads stored settings from localStorage.
+ *
+ * Never throws and never returns a non-object: corrupt JSON resets the key
+ * and yields `{}`, and the legacy array-form `highlights` value is joined
+ * back to a string (guarded so a malformed value cannot throw).
+ *
+ * @returns Stored settings object, or `{}` when absent or invalid.
+ */
+function loadFromLocalStorage(): Record<string, any> {
 	let storedSettings: Record<string, any> = {};
 
 	try {
 		storedSettings = JSON.parse(storage.get("settings") || "{}");
 	} catch (e) {
-		storage.remove("settings");
+		try {
+			storage.remove("settings");
+		} catch {
+			// Storage blocked: nothing to clean up.
+		}
+
+		return {};
 	}
 
-	if (!storedSettings) {
+	if (!storedSettings || typeof storedSettings !== "object" || Array.isArray(storedSettings)) {
 		return {};
 	}
 
 	// Older The Lounge versions converted highlights to an array, turn it back into a string
-	if (storedSettings.highlights !== null && typeof storedSettings.highlights === "object") {
-		storedSettings.highlights = storedSettings.highlights.join(", ");
+	try {
+		if (storedSettings.highlights !== null && typeof storedSettings.highlights === "object") {
+			storedSettings.highlights = (storedSettings.highlights as unknown[]).join(", ");
+		}
+	} catch {
+		delete storedSettings.highlights;
 	}
 
 	return storedSettings;
@@ -103,6 +146,10 @@ function assignStoredSettings(
 	storedSettings: Record<string, any>
 ) {
 	const newSettings = {...defaultSettings};
+
+	if (!storedSettings || typeof storedSettings !== "object") {
+		return newSettings;
+	}
 
 	for (const key in defaultSettings) {
 		// Make sure the setting in local storage has the same type that the code expects

@@ -331,8 +331,12 @@ class Config {
 		}
 
 		if (manifestExists) {
-			const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-			this.values.themeColor = manifest.theme_color;
+			try {
+				const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+				this.values.themeColor = manifest.theme_color;
+			} catch (e: any) {
+				log.error(`Failed to read webmanifest: ${String(e)}`);
+			}
 		}
 
 		// log dir probably shouldn't be world accessible.
