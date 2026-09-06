@@ -16,7 +16,19 @@ program
 
 		// Get paths to the location of packages directory
 		const packagesConfig = path.join(Config.getPackagesPath(), "package.json");
-		const packagesList = JSON.parse(fs.readFileSync(packagesConfig, "utf-8")).dependencies;
+		let packagesList: Record<string, string> | undefined;
+
+		try {
+			packagesList = JSON.parse(fs.readFileSync(packagesConfig, "utf-8")).dependencies;
+		} catch (e: any) {
+			log.error(`Failed to read packages/package.json: ${String(e)}`);
+			return;
+		}
+
+		if (!packagesList) {
+			log.warn("There are no packages installed.");
+			return;
+		}
 		const argsList = ["upgrade", "--latest"];
 
 		let count = 0;

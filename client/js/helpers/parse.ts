@@ -114,6 +114,11 @@ function createFragment(fragment: StyledFragment): VNode | string | undefined {
 // produce a single span instead of nested ones.
 function createEmojiFragment(fragment: StyledFragment): VNode {
 	const {classes, style} = fragmentStyle(fragment);
+
+	// `emojiModifiersRegex` is a shared `g`-flag RegExp whose `lastIndex`
+	// persists between uses; `String.replace` resets it per call, but reset
+	// explicitly so an interleaved/aborted use can never shift a later scan.
+	emojiModifiersRegex.lastIndex = 0;
 	const emojiWithoutModifiers = (fragment.text || "").replace(emojiModifiersRegex, "");
 	const title = emojiMap[emojiWithoutModifiers]
 		? `Emoji: ${emojiMap[emojiWithoutModifiers]}`
@@ -174,124 +179,149 @@ function createFragments(fragment: StyledFragment): (VNode | string | undefined)
 	return result;
 }
 
-// Transform an IRC message potentially filled with styling control codes, URLs,
-// nicknames, and channels into a string of HTML elements to display on the client.
+/**
+ * Transforms an IRC message (styling codes, URLs, nicknames, channels) into
+ * renderable HTML elements for the client.
+ *
+ * Never throws on malformed input: non-string text yields an empty result and
+ * per-line parsing degrades gracefully, so one bad message cannot break the
+ * whole channel view.
+ *
+ * @param text Raw IRC message text.
+ * @param message Message context (users, previews, bridge flags).
+ * @param network Network context (channel prefixes, user modes).
+ * @returns Array of VNodes/strings (nested per line) for rendering.
+ */
 function parse(text: string, message?: ClientMessage, network?: ClientNetwork) {
+	if (typeof text !== "string" || text.length === 0) {
+		return parseLine("", message, network);
+	}
+
 	// Each line of a draft/multiline message is its own PRIVMSG on the wire, so
 	// parse them separately and join them with a <br>, which keeps per-line
 	// styling and lets the text wrap as usual.
-	if (text && text.includes("\n")) {
-		return text
-			.split("\n")
-			.flatMap((line, i) =>
-				i === 0
-					? parseLine(line, message, network)
-					: [createElement("br"), ...parseLine(line, message, network)]
-			);
+	if (text.includes("\n")) {
+		try {
+			return text
+				.split("\n")
+				.flatMap((line, i) =>
+					i === 0
+						? parseLine(line, message, network)
+						: [createElement("br"), ...parseLine(line, message, network)]
+				);
+		} catch {
+			return parseLine(text.replace(/\n/g, " "), message, network);
+		}
 	}
 
 	return parseLine(text, message, network);
 }
 
 function parseLine(text: string, message?: ClientMessage, network?: ClientNetwork) {
-	// Extract the styling information and get the plain text version from it
-	const isBridged = (message?.from?.shoutbox && message?.bbcodeBeautified !== true) ?? false;
-	const styleFragments = parseStyle(text, isBridged);
-	const cleanText = styleFragments.map((fragment) => fragment.text).join("");
+	try {
+		// Extract the styling information and get the plain text version from it
+		const isBridged = (message?.from?.shoutbox && message?.bbcodeBeautified !== true) ?? false;
+		const styleFragments = parseStyle(text, isBridged);
+		const cleanText = styleFragments.map((fragment) => fragment.text).join("");
 
-	// On the plain text, find channels and URLs, returned as "parts". Parts are
-	// arrays of objects containing start and end markers, as well as metadata
-	// depending on what was found (channel or link).
-	const channelPrefixes = network ? network.serverOptions.CHANTYPES : ["#", "&"];
-	const userModes = network
-		? network.serverOptions.PREFIX?.prefix?.map((pref) => pref.symbol)
-		: ["!", "@", "%", "+"];
-	const channelParts = findChannels(cleanText, channelPrefixes, userModes);
-	const linkParts = findLinks(cleanText);
-	const nameParts = findNames(cleanText, message ? message.users || [] : []);
+		// On the plain text, find channels and URLs, returned as "parts". Parts are
+		// arrays of objects containing start and end markers, as well as metadata
+		// depending on what was found (channel or link).
+		const channelPrefixes = network ? network.serverOptions.CHANTYPES : ["#", "&"];
+		const userModes = network
+			? network.serverOptions.PREFIX?.prefix?.map((pref) => pref.symbol)
+			: ["!", "@", "%", "+"];
+		const channelParts = findChannels(cleanText, channelPrefixes, userModes);
+		const linkParts = findLinks(cleanText);
+		const nameParts = findNames(cleanText, message ? message.users || [] : []);
 
-	const parts = (channelParts as MergedParts).concat(linkParts).concat(nameParts);
+		const parts = (channelParts as MergedParts).concat(linkParts).concat(nameParts);
 
-	// Merge the styling information with the channels / URLs / nicks / text objects and
-	// generate HTML strings with the resulting fragments. Emoji are wrapped at the
-	// fragment level so they keep the `emoji` class even inside links, channels and nicks.
-	return merge(parts, styleFragments, cleanText).map((textPart) => {
-		const fragments = textPart.fragments.flatMap((fragment) => createFragments(fragment));
+		// Merge the styling information with the channels / URLs / nicks / text objects and
+		// generate HTML strings with the resulting fragments. Emoji are wrapped at the
+		// fragment level so they keep the `emoji` class even inside links, channels and nicks.
+		return merge(parts, styleFragments, cleanText).map((textPart) => {
+			const fragments = textPart.fragments.flatMap((fragment) => createFragments(fragment));
 
-		// Wrap these potentially styled fragments with links and channel buttons
-		if (textPart.link) {
-			const preview =
-				message &&
-				message.previews &&
-				message.previews.find((p) => p.link === textPart.link);
-			const link = createElement(
-				"a",
-				{
-					href: textPart.link,
-					dir: preview ? null : "auto",
-					target: "_blank",
-					rel: "noopener",
-				},
-				fragments
-			);
+			// Wrap these potentially styled fragments with links and channel buttons
+			if (textPart.link) {
+				const preview =
+					message &&
+					message.previews &&
+					message.previews.find((p) => p.link === textPart.link);
+				const link = createElement(
+					"a",
+					{
+						href: textPart.link,
+						dir: preview ? null : "auto",
+						target: "_blank",
+						rel: "noopener",
+					},
+					fragments
+				);
 
-			if (!preview) {
-				return link;
-			}
+				if (!preview) {
+					return link;
+				}
 
-			const linkEls = [link];
+				const linkEls = [link];
 
-			if (preview.size > 0) {
+				if (preview.size > 0) {
+					linkEls.push(
+						createElement(LinkPreviewFileSize, {
+							size: preview.size,
+						})
+					);
+				}
+
 				linkEls.push(
-					createElement(LinkPreviewFileSize, {
-						size: preview.size,
+					createElement(LinkPreviewToggle, {
+						link: preview,
+						message: message,
 					})
+				);
+
+				// We wrap the link, size, and the toggle button into <span dir="auto">
+				// to correctly keep the left-to-right order of these elements
+				return createElement(
+					"span",
+					{
+						dir: "auto",
+					},
+					linkEls
+				);
+			} else if (textPart.channel) {
+				return createElement(
+					InlineChannel,
+					{
+						channel: textPart.channel,
+					},
+					{
+						default: () => fragments,
+					}
+				);
+			} else if (textPart.nick) {
+				return createElement(
+					Username,
+					{
+						user: {
+							nick: textPart.nick,
+						},
+						dir: "auto",
+					},
+					{
+						default: () => fragments,
+					}
 				);
 			}
 
-			linkEls.push(
-				createElement(LinkPreviewToggle, {
-					link: preview,
-					message: message,
-				})
-			);
-
-			// We wrap the link, size, and the toggle button into <span dir="auto">
-			// to correctly keep the left-to-right order of these elements
-			return createElement(
-				"span",
-				{
-					dir: "auto",
-				},
-				linkEls
-			);
-		} else if (textPart.channel) {
-			return createElement(
-				InlineChannel,
-				{
-					channel: textPart.channel,
-				},
-				{
-					default: () => fragments,
-				}
-			);
-		} else if (textPart.nick) {
-			return createElement(
-				Username,
-				{
-					user: {
-						nick: textPart.nick,
-					},
-					dir: "auto",
-				},
-				{
-					default: () => fragments,
-				}
-			);
-		}
-
-		return fragments;
-	});
+			return fragments;
+		});
+	} catch {
+		// Last-resort fallback: render the raw text so one malformed message
+		// (bad network options, corrupt previews, ...) cannot blank the view.
+		return [typeof text === "string" ? text : ""];
+	}
 }
 
 export default parse;

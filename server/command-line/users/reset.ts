@@ -55,7 +55,14 @@ program
 function change(name, password) {
 	const pathReal = Config.getUserConfigPath(name);
 	const pathTemp = pathReal + ".tmp";
-	const user = JSON.parse(fs.readFileSync(pathReal, "utf-8"));
+	let user: {password?: string; sessions?: unknown};
+
+	try {
+		user = JSON.parse(fs.readFileSync(pathReal, "utf-8"));
+	} catch (e: any) {
+		log.error(`Failed to read user ${colors.bold(name)}: ${String(e)}`);
+		return;
+	}
 
 	user.password = Helper.password.hash(password);
 	user.sessions = {};

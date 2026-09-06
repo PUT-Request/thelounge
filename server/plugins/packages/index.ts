@@ -216,6 +216,15 @@ function watchPackages(packageJson: string) {
 	);
 }
 
+/**
+ * Returns outdated package info, caching the result for cacheTimeout ms.
+ *
+ * Never throws: missing/corrupt package.json degrades to false, and
+ * yarn failures resolve through updateOutdated instead of rejecting.
+ *
+ * @param cacheTimeout How long to cache the result in ms.
+ * @returns Outdated packages info, or false when none/unknown.
+ */
 async function outdated(cacheTimeout = TIME_TO_LIVE) {
 	if (cache.outdated !== undefined) {
 		return cache.outdated;
@@ -224,7 +233,18 @@ async function outdated(cacheTimeout = TIME_TO_LIVE) {
 	// Get paths to the location of packages directory
 	const packagesPath = Config.getPackagesPath();
 	const packagesConfig = path.join(packagesPath, "package.json");
-	const packagesList = JSON.parse(fs.readFileSync(packagesConfig, "utf-8")).dependencies;
+	let packagesList: Record<string, string> | undefined;
+
+	try {
+		packagesList = JSON.parse(fs.readFileSync(packagesConfig, "utf-8")).dependencies;
+	} catch (e: any) {
+		log.error(`Failed to read packages/package.json: ${colors.red(e)}`);
+		return false;
+	}
+
+	if (!packagesList) {
+		return false;
+	}
 	const argsList = [
 		"outdated",
 		"--latest",

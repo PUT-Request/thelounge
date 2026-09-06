@@ -1,7 +1,12 @@
 import {type Matcher} from "./types/matcher";
 
 /**
- * Matchers for shoutbox messages
+ * Ordered shoutbox bridge matchers (basic nick-list matchers plus
+ * advanced predicate matchers). First match wins in `parser()`.
+ *
+ * Each `transform` is total: non-string input yields `undefined` (no match)
+ * instead of throwing, and shared-regex `lastIndex` is reset per call so
+ * sequential parses cannot leak state.
  */
 export const matchers: Matcher[] = [
 	{
@@ -11,7 +16,19 @@ export const matchers: Matcher[] = [
 		matches: ["chatbot"],
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -21,7 +38,19 @@ export const matchers: Matcher[] = [
 		matches: ["sauron"],
 		regex: /^0 \[2 SB0 \] \((?<nick>[^):]+)\): (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -31,7 +60,19 @@ export const matchers: Matcher[] = [
 		matches: ["aurarelay"],
 		regex: /^11\[04(?<nick>[^:\]]+?)11\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -41,7 +82,19 @@ export const matchers: Matcher[] = [
 		matches: ["willie"],
 		regex: /^09\[SB\] (?<nick>[^:]+): (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -51,7 +104,19 @@ export const matchers: Matcher[] = [
 		matches: ["darkpeers", "dp"],
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -61,7 +126,19 @@ export const matchers: Matcher[] = [
 		matches: ["subedaar"],
 		regex: /^\[Web\] (?<nick>[^:]+): (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -71,7 +148,19 @@ export const matchers: Matcher[] = [
 		matches: ["endor"],
 		regex: /^<(?<nick>[^>]+?)> (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -81,7 +170,19 @@ export const matchers: Matcher[] = [
 		matches: ["dreadvaultbot"],
 		regex: /^<(?<nick>[^>]+?)> (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -91,7 +192,19 @@ export const matchers: Matcher[] = [
 		matches: ["bbot"],
 		regex: /^\[(?<nick>[^\]]+)\] \([^)]+\): (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -101,20 +214,39 @@ export const matchers: Matcher[] = [
 		matches: ["mellos"],
 		regex: /^»(?<nick>[^«]+?)(?: (?:\p{RGI_Emoji}+|\(.+?\)))?« (?<content>.*)/v,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
 		type: "advanced",
 		name: "HUNO (Web)",
 		description: "Nicks in the format '<nick>-web'",
-		matches(nick) {
-			return nick.endsWith("-web") || nick.endsWith("-web", nick.length - 2);
+		matches(nick: string) {
+			return typeof nick === "string" && nick.endsWith("-web");
 		},
 		transform(message) {
+			const nick = message?.from?.nick;
+			const content = message?.text;
+
+			if (typeof nick !== "string" || typeof content !== "string") {
+				return undefined;
+			}
+
 			return {
-				nick: message.from!.nick!.slice(0, -4),
-				content: message.text,
+				nick: nick.slice(0, -4),
+				content,
 			};
 		},
 	},
@@ -125,7 +257,19 @@ export const matchers: Matcher[] = [
 		matches: ["bot"],
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -135,7 +279,19 @@ export const matchers: Matcher[] = [
 		matches: ["luminarr"],
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -145,7 +301,19 @@ export const matchers: Matcher[] = [
 		matches: ["msbridge"],
 		regex: /^\[(?<nick>[^:\]]+)\]: (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -155,7 +323,19 @@ export const matchers: Matcher[] = [
 		matches: ["bridgebot"],
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -165,7 +345,19 @@ export const matchers: Matcher[] = [
 		matches: ["wall-e"],
 		regex: /^04\[Chatbox\] (?<nick>[^:]+): (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -175,7 +367,19 @@ export const matchers: Matcher[] = [
 		matches: ["stc-shout"],
 		regex: /^<(?<nick>[^>]+?)> (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -185,7 +389,19 @@ export const matchers: Matcher[] = [
 		matches: ["GLaDOS"],
 		regex: /^🛰️(?<nick>[^:]+?): (?<content>.*)/v,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -195,7 +411,19 @@ export const matchers: Matcher[] = [
 		matches: ["ulcx"],
 		regex: /^\[(?<nick>[^:\]]+)\]: (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -205,7 +433,19 @@ export const matchers: Matcher[] = [
 		matches: ["yus"],
 		regex: /^\[(?<nick>[^:\]]+)\] (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 	{
@@ -215,13 +455,31 @@ export const matchers: Matcher[] = [
 		matches: ["zenith"],
 		regex: /^\[(?<nick>[^:\]]+)\]: (?<content>.*)/,
 		transform(message) {
-			return typedGroups(message.text!.match(this.regex));
+			const text = typeof message?.text === "string" ? message.text : "";
+			if (!text) {
+				return undefined;
+			}
+
+			try {
+				// Reset stateful regex cursor so consecutive matches cannot leak
+				// `lastIndex` into each other.
+				this.regex.lastIndex = 0;
+				return typedGroups(text.match(this.regex));
+			} catch {
+				return undefined;
+			}
 		},
 	},
 ];
 
 /**
- * Helper to get regex match groups with inferd types from return of parent
+ * Extracts named capture groups (`nick`, `content`) from a regex match.
+ *
+ * Never throws: a non-match (`null`) yields `undefined` instead of raising,
+ * so non-bridged lines fall through to the original message.
+ *
+ * @param regexMatch Result of `String.match` against a matcher regex.
+ * @returns The `nick`/`content` groups, or `undefined` when no match.
  */
 function typedGroups<T = RegExpMatchArray["groups"]>(regexMatch: RegExpMatchArray | null) {
 	return regexMatch?.groups as T;

@@ -3,8 +3,38 @@ import type {ServerToClientEvents, ClientToServerEvents} from "../../shared/type
 
 type Socket = rawSocket<ServerToClientEvents, ClientToServerEvents>;
 
+/**
+ * Parses the socket.io transport list from the server-rendered body dataset.
+ *
+ * Never throws: a corrupt `data-transports` payload falls back to the default
+ * `["polling", "websocket"]` transport list so boot never crashes on bad HTML.
+ *
+ * @returns Transport names accepted by socket.io-client.
+ */
+function parseTransports(): string[] {
+	const fallback = ["polling", "websocket"];
+
+	try {
+		const raw = document.body.dataset.transports || "";
+
+		if (!raw) {
+			return fallback;
+		}
+
+		const parsed: unknown = JSON.parse(raw);
+
+		if (Array.isArray(parsed) && parsed.every((t) => typeof t === "string")) {
+			return parsed;
+		}
+	} catch {
+		// Corrupt dataset: fall through to the default transports.
+	}
+
+	return fallback;
+}
+
 const socket: Socket = io({
-	transports: JSON.parse(document.body.dataset.transports || "['polling', 'websocket']"),
+	transports: parseTransports(),
 	path: window.location.pathname + "socket.io/",
 	autoConnect: false,
 	reconnection: !document.body.classList.contains("public"),

@@ -39,7 +39,17 @@ const controlCodesRx = /[\u0000-\u0009\u000B-\u001F]/g;
 // similarly styled section of the text. Each object carries the `text`, style
 // information (`bold`, `textColor`, `bgcolor`, `italic`,
 // `underline`, `strikethrough`, `monospace`), and `start`/`end` cursors.
+//
+// Never throws: non-string input yields an empty list instead of a `TypeError`,
+// so malformed messages cannot crash rendering.
+//
+// @param text Raw IRC message text with styling control codes.
+// @returns Array of styled fragments covering the plain-text version.
 function parseStyle(text: string) {
+	if (typeof text !== "string") {
+		return [];
+	}
+
 	const result: ParsedStyle[] = [];
 	let start = 0;
 	let position = 0;
@@ -79,7 +89,11 @@ function parseStyle(text: string) {
 		// the current position
 		const textPart = text.slice(start, position);
 
-		// Filters out all non-style related control codes present in this text
+		// Filters out all non-style related control codes present in this text.
+		// `controlCodesRx` is a shared `g`-flag RegExp whose `lastIndex` persists
+		// between uses; `String.replace` resets it per call, but reset explicitly
+		// so an exception/interleaved use can never shift a later scan.
+		controlCodesRx.lastIndex = 0;
 		const processedText = textPart.replace(controlCodesRx, " ");
 
 		if (processedText.length) {
@@ -226,7 +240,20 @@ const properties = [
 	"monospace",
 ];
 
+/**
+ * Converts shoutbox BBCode formatting tags to IRC control codes so bridged
+ * messages can reuse the IRC styling parser.
+ *
+ * Never throws: non-string input yields an empty string.
+ *
+ * @param str Raw bridged message text with BBCode tags.
+ * @returns Text with formatting tags replaced by IRC control codes.
+ */
 function convertBBCode(str: string) {
+	if (typeof str !== "string") {
+		return "";
+	}
+
 	// convert formatting to irc
 	str = str.replace(/(?:\[b(?:=.*)?\])|(?:\[\/b\])/gi, "\x02");
 	str = str.replace(/(?:\[i(?:=.*)?\])|(?:\[\/i\])/gi, "\x1D");
@@ -245,7 +272,22 @@ function convertBBCode(str: string) {
 	return str;
 }
 
+/**
+ * Parses message text into merged style fragments for rendering.
+ *
+ * For bridged (shoutbox) messages the BBCode is first converted to IRC
+ * control codes; adjacent fragments with identical styling are then combined.
+ * Never throws: non-string input yields an empty list.
+ *
+ * @param text Raw message text.
+ * @param isBridged Whether the text carries shoutbox BBCode.
+ * @returns Optimized style fragments covering the plain text.
+ */
 function prepare(text: string, isBridged?: boolean) {
+	if (typeof text !== "string") {
+		return [];
+	}
+
 	return (
 		parseStyle(isBridged ? convertBBCode(text) : text)
 			// This optimizes fragments by combining them together when all their values
